@@ -15,6 +15,7 @@ type Config struct {
 	Storage    StorageConfig    `yaml:"storage"`
 	DataSource DataSourceConfig `yaml:"data_source"`
 	Strategy   StrategyConfig   `yaml:"strategy"`
+	Publishing PublishingConfig `yaml:"publishing"`
 	Funds      []FundConfig     `yaml:"funds"`
 	Candidates []FundConfig     `yaml:"candidates"`
 
@@ -36,6 +37,36 @@ type DataSourceConfig struct {
 	Provider              string `yaml:"provider"`
 	TushareTokenEnv       string `yaml:"tushare_token_env"`
 	RequestTimeoutSeconds int    `yaml:"request_timeout_seconds"`
+}
+
+type PublishingConfig struct {
+	GitBook GitBookPublishConfig `yaml:"gitbook"`
+}
+
+type GitBookPublishConfig struct {
+	Enabled                     bool   `yaml:"enabled"`
+	Mode                        string `yaml:"mode"`
+	DocsRoot                    string `yaml:"docs_root"`
+	ProjectDirectory            string `yaml:"project_directory"`
+	GenerateHomepage            bool   `yaml:"generate_homepage"`
+	GenerateSummary             bool   `yaml:"generate_summary"`
+	IncludeDaily                bool   `yaml:"include_daily"`
+	IncludeDCAPlan              bool   `yaml:"include_dca_plan"`
+	IncludeBacktest             bool   `yaml:"include_backtest"`
+	HideBacktestWhenUnavailable bool   `yaml:"hide_backtest_when_unavailable"`
+	BacktestDays                int    `yaml:"backtest_days"`
+	BacktestRebalanceEvery      int    `yaml:"backtest_rebalance_every"`
+	ArchiveByRunDate            bool   `yaml:"archive_by_run_date"`
+	OverwriteLatest             bool   `yaml:"overwrite_latest"`
+	RetainDays                  int    `yaml:"retain_days"`
+	SiteTitle                   string `yaml:"site_title"`
+	SiteDescription             string `yaml:"site_description"`
+	StrategyOverviewPath        string `yaml:"strategy_overview_path"`
+	RiskDisclosurePath          string `yaml:"risk_disclosure_path"`
+	Visibility                  string `yaml:"visibility"`
+	OrganizationID              string `yaml:"organization_id"`
+	SiteID                      string `yaml:"site_id"`
+	SpaceID                     string `yaml:"space_id"`
 }
 
 type StrategyConfig struct {
@@ -81,6 +112,10 @@ type TurnoverConfig struct {
 	MinSwapScore             int     `yaml:"min_swap_score"`
 	MaxProtectedReduceWeight float64 `yaml:"max_protected_reduce_weight"`
 	MonthlyDCAAmount         float64 `yaml:"monthly_dca_amount"`
+	MinDCAFundAmount         float64 `yaml:"min_dca_fund_amount"`
+	DCAFrequency             string  `yaml:"dca_frequency"`
+	MaxDCAFunds              int     `yaml:"max_dca_funds"`
+	PauseDCAOnRisk           *bool   `yaml:"pause_dca_on_risk,omitempty"`
 	PreferDCA                bool    `yaml:"prefer_dca"`
 }
 
@@ -112,6 +147,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg.configPath = path
+	cfg.applyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -158,10 +194,69 @@ func (c *Config) Validate() error {
 	if c.Strategy.CandidatePool.MinFundSizeYi < 0 || c.Strategy.CandidatePool.MinEstablishedYears < 0 || c.Strategy.CandidatePool.MaxExpenseRatio < 0 {
 		return errors.New("candidate_pool thresholds must be non-negative")
 	}
-	if c.Strategy.Turnover.MinSwapScore < 0 || c.Strategy.Turnover.MaxProtectedReduceWeight < 0 || c.Strategy.Turnover.MonthlyDCAAmount < 0 {
+	if c.Strategy.Turnover.MinSwapScore < 0 || c.Strategy.Turnover.MaxProtectedReduceWeight < 0 || c.Strategy.Turnover.MonthlyDCAAmount < 0 || c.Strategy.Turnover.MinDCAFundAmount < 0 || c.Strategy.Turnover.MaxDCAFunds < 0 {
 		return errors.New("turnover thresholds must be non-negative")
 	}
+	if c.Publishing.GitBook.RetainDays < 0 {
+		return errors.New("publishing.gitbook.retain_days must be non-negative")
+	}
+	if c.Publishing.GitBook.BacktestDays < 0 || c.Publishing.GitBook.BacktestRebalanceEvery < 0 {
+		return errors.New("publishing.gitbook backtest settings must be non-negative")
+	}
+	if c.Publishing.GitBook.Enabled {
+		if strings.TrimSpace(c.Publishing.GitBook.Mode) != "git-sync" {
+			return fmt.Errorf("publishing.gitbook.mode must be git-sync, got %s", c.Publishing.GitBook.Mode)
+		}
+		if strings.TrimSpace(c.Publishing.GitBook.DocsRoot) == "" {
+			return errors.New("publishing.gitbook.docs_root is required when gitbook publishing is enabled")
+		}
+		if strings.TrimSpace(c.Publishing.GitBook.ProjectDirectory) == "" {
+			return errors.New("publishing.gitbook.project_directory is required when gitbook publishing is enabled")
+		}
+	}
 	return nil
+}
+
+func (c *Config) applyDefaults() {
+	if strings.TrimSpace(c.Strategy.Turnover.DCAFrequency) == "" {
+		c.Strategy.Turnover.DCAFrequency = "monthly"
+	}
+	if c.Strategy.Turnover.MinDCAFundAmount == 0 {
+		c.Strategy.Turnover.MinDCAFundAmount = 1000
+	}
+	if c.Strategy.Turnover.MaxDCAFunds == 0 {
+		c.Strategy.Turnover.MaxDCAFunds = 3
+	}
+	if c.Strategy.Turnover.PauseDCAOnRisk == nil {
+		c.Strategy.Turnover.PauseDCAOnRisk = boolPtr(true)
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.Mode) == "" {
+		c.Publishing.GitBook.Mode = "git-sync"
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.DocsRoot) == "" {
+		c.Publishing.GitBook.DocsRoot = filepath.Join("..", "docs", "gitbook")
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.ProjectDirectory) == "" {
+		c.Publishing.GitBook.ProjectDirectory = filepath.ToSlash(filepath.Join("docs", "gitbook"))
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.SiteTitle) == "" {
+		c.Publishing.GitBook.SiteTitle = c.Portfolio.Name
+	}
+	if c.Publishing.GitBook.BacktestDays == 0 {
+		c.Publishing.GitBook.BacktestDays = 120
+	}
+	if c.Publishing.GitBook.BacktestRebalanceEvery == 0 {
+		c.Publishing.GitBook.BacktestRebalanceEvery = 20
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.StrategyOverviewPath) == "" {
+		c.Publishing.GitBook.StrategyOverviewPath = filepath.ToSlash(filepath.Join("strategy", "overview.md"))
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.RiskDisclosurePath) == "" {
+		c.Publishing.GitBook.RiskDisclosurePath = filepath.ToSlash(filepath.Join("about", "risk.md"))
+	}
+	if strings.TrimSpace(c.Publishing.GitBook.Visibility) == "" {
+		c.Publishing.GitBook.Visibility = "public"
+	}
 }
 
 func validateConfiguredFund(fund FundConfig, requireWeights bool) error {
@@ -214,7 +309,31 @@ func Default() *Config {
 			BuySignal:     BuySignalConfig{MaxSinglePositionWeight: 0.18, MinGapToTarget: 0.20},
 			SellSignal:    SellSignalConfig{OverweightRelativeThreshold: 0.35, OverweightAbsoluteThreshold: 0.08},
 			CandidatePool: CandidatePoolConfig{MinFundSizeYi: 8, MinEstablishedYears: 1, MaxExpenseRatio: 0.008, CoreRequireIndex: true, PreferBenchmarkMatch: true},
-			Turnover:      TurnoverConfig{Mode: "low_turnover", MinSwapScore: 7, MaxProtectedReduceWeight: 0.22, MonthlyDCAAmount: 5000, PreferDCA: true},
+			Turnover:      TurnoverConfig{Mode: "low_turnover", MinSwapScore: 7, MaxProtectedReduceWeight: 0.22, MonthlyDCAAmount: 5000, MinDCAFundAmount: 1000, DCAFrequency: "monthly", MaxDCAFunds: 3, PauseDCAOnRisk: boolPtr(true), PreferDCA: true},
+		},
+		Publishing: PublishingConfig{
+			GitBook: GitBookPublishConfig{
+				Enabled:                     true,
+				Mode:                        "git-sync",
+				DocsRoot:                    filepath.Join("..", "docs", "gitbook"),
+				ProjectDirectory:            filepath.ToSlash(filepath.Join("docs", "gitbook")),
+				GenerateHomepage:            true,
+				GenerateSummary:             true,
+				IncludeDaily:                true,
+				IncludeDCAPlan:              true,
+				IncludeBacktest:             false,
+				HideBacktestWhenUnavailable: true,
+				BacktestDays:                120,
+				BacktestRebalanceEvery:      20,
+				ArchiveByRunDate:            true,
+				OverwriteLatest:             true,
+				RetainDays:                  0,
+				SiteTitle:                   "Derek Fund Advisor",
+				SiteDescription:             "Low-turnover, long-term holding, DCA-first portfolio reports",
+				StrategyOverviewPath:        filepath.ToSlash(filepath.Join("strategy", "overview.md")),
+				RiskDisclosurePath:          filepath.ToSlash(filepath.Join("about", "risk.md")),
+				Visibility:                  "public",
+			},
 		},
 		Funds: []FundConfig{
 			{Code: "000979", Name: "景顺长城沪港深精选股票A", Category: "active_cn_equity", AccountValue: 68000, TargetWeight: 0.13, Benchmark: "hs300_hk_mix", Role: "satellite", Status: "active", Protected: true, DCAEnabled: true},
@@ -258,4 +377,8 @@ func WriteExample(path string, force bool) error {
 	}
 	content := "# Generated by fundcli init\n" + strings.TrimSpace(string(buf)) + "\n"
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }

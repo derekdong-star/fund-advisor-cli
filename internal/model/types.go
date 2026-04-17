@@ -166,7 +166,48 @@ type AnalysisReport struct {
 	Candidates      []CandidateSuggestion `json:"candidates,omitempty"`
 	Recommendations []TradeRecommendation `json:"recommendations,omitempty"`
 	ExecutionPlan   *ExecutionPlan        `json:"execution_plan,omitempty"`
+	DCAPlan         *DCAPlanReport        `json:"dca_plan,omitempty"`
 	Position        []PositionState       `json:"position,omitempty"`
+}
+
+type DCAPlanSummary struct {
+	PortfolioName      string    `json:"portfolio_name"`
+	PlanDate           time.Time `json:"plan_date"`
+	Frequency          string    `json:"frequency"`
+	Budget             float64   `json:"budget"`
+	PlannedAmount      float64   `json:"planned_amount"`
+	ReserveAmount      float64   `json:"reserve_amount"`
+	EligibleFundCount  int       `json:"eligible_fund_count"`
+	SelectedFundCount  int       `json:"selected_fund_count"`
+	PauseOnRiskEnabled bool      `json:"pause_on_risk_enabled"`
+	Notes              []string  `json:"notes,omitempty"`
+	GeneratedAt        time.Time `json:"generated_at"`
+}
+
+type DCAPlanItem struct {
+	FundCode       string  `json:"fund_code"`
+	FundName       string  `json:"fund_name"`
+	Role           string  `json:"role"`
+	Action         Action  `json:"action"`
+	CurrentWeight  float64 `json:"current_weight"`
+	TargetWeight   float64 `json:"target_weight"`
+	GapWeight      float64 `json:"gap_weight"`
+	PlannedAmount  float64 `json:"planned_amount"`
+	Priority       int     `json:"priority"`
+	Reason         string  `json:"reason"`
+}
+
+type DCASkippedFund struct {
+	FundCode string `json:"fund_code"`
+	FundName string `json:"fund_name"`
+	Action   Action `json:"action"`
+	Reason   string `json:"reason"`
+}
+
+type DCAPlanReport struct {
+	Summary DCAPlanSummary  `json:"summary"`
+	Items   []DCAPlanItem   `json:"items,omitempty"`
+	Skipped []DCASkippedFund `json:"skipped,omitempty"`
 }
 
 type BacktestSummary struct {

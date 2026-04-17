@@ -12,6 +12,7 @@ Go CLI for daily mutual fund monitoring, NAV collection, and rule-based portfoli
 - evaluates candidate funds for replacement suggestions and stores them with each analysis run
 - writes Markdown or JSON reports to files when needed
 - emits a recommended action list with swap / reduce / buy amounts
+- generates a monthly DCA plan that separates continue-invest from pause-for-risk cases
 
 ## Commands
 
@@ -22,7 +23,10 @@ go run ./cmd/fundcli fetch --config ./configs/portfolio.yaml --days 180
 go run ./cmd/fundcli analyze --config ./configs/portfolio.yaml
 go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format table
 go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format markdown --output ./reports/latest.md
+go run ./cmd/fundcli dca-plan --config ./configs/portfolio.yaml --format markdown --output ./reports/dca-plan.md
 go run ./cmd/fundcli run --config ./configs/portfolio.yaml --format markdown --output ./reports/daily.md
+go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml
+go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180
 go run ./cmd/fundcli backtest --config ./configs/portfolio.yaml --days 120 --rebalance-every 20
 ```
 
@@ -38,6 +42,9 @@ Key fields:
 - `role`: `core`, `satellite`, `hedge`, or `stabilizer`
 - `candidates`: optional watchlist used for replacement suggestions
 - candidate metadata: supports `expense_ratio`, `fund_size_yi`, `established_years`, `is_index`, `tags`
+- turnover DCA settings: `monthly_dca_amount`, `min_dca_fund_amount`, `dca_frequency`, `max_dca_funds`, `pause_dca_on_risk`
+- GitBook publishing: `publishing.gitbook.docs_root`, `project_directory`, `generate_homepage`, `generate_summary`, `include_backtest`, `hide_backtest_when_unavailable`, `backtest_days`, `backtest_rebalance_every`, `retain_days`
+- GitBook sync IDs: `publishing.gitbook.organization_id`, `site_id`, `space_id`
 
 ## Strategy model
 
@@ -55,6 +62,8 @@ When multiple weak holdings compete for the same candidate, the recommendation e
 
 `report` renders the latest saved analysis snapshot, so it stays consistent with the last `analyze` or `run` execution. Daily reports now include a recommended action list with suggested source fund, target fund, portfolio weight change, and amount.
 
+`dca-plan` renders a current contribution plan from live portfolio state. It only considers `dca_enabled` funds, can cap the number of active DCA targets, skips allocations below `min_dca_fund_amount`, and by default pauses monthly contributions for funds currently marked `PAUSE_BUY`, `REDUCE`, or `REPLACE_WATCH`.
+
 ## Notes
 
 - SQLite now uses `WAL` mode plus a `busy_timeout`, which reduces transient `database is locked` errors during repeated CLI runs.
@@ -66,3 +75,34 @@ When multiple weak holdings compete for the same candidate, the recommendation e
 ## Backtest
 
 `backtest` replays the current rule set on overlapping historical trading days from the local SQLite snapshot store. It compares the strategy against a simple buy-and-hold benchmark built from the starting portfolio weights, only uses cash raised by prior sells, and currently ignores fees, slippage, and taxes.
+
+## GitBook Export
+
+`docs publish` builds a GitBook-ready tree under `publishing.gitbook.docs_root`.
+
+Generated artifacts include:
+
+- `.gitbook.yaml`
+- `README.md`
+- `SUMMARY.md`
+- `latest/daily.md`
+- `latest/dca-plan.md`
+- `latest/backtest.md` when enabled and not hidden for unavailable data
+- `archive/YYYY/MM/DD/...` plus year/month/day index pages
+- `strategy/overview.md`
+- `about/risk.md`
+
+The intended workflow is to point GitBook Git Sync at the configured `project_directory` and let GitBook sync the generated Markdown.
+
+Recommended publish flow:
+
+1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180` in CI or before pushing docs changes.
+2. Commit the generated `docs/gitbook/` tree to the same repository that GitBook is syncing.
+3. In GitBook, connect Git Sync to this repository and set the content root to `docs/gitbook`.
+4. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.
+
+The repository now includes a runnable workflow at `.github/workflows/publish-gitbook.yml`.
+
+It runs on manual trigger or at `09:05` Asia/Shanghai time from Monday to Friday, publishes with `--refresh`, then commits `docs/gitbook/` only when the generated content changed.
+
+If you set `publishing.gitbook.retain_days`, old archive day folders older than that rolling window are pruned during `docs publish`. `0` keeps the full archive.

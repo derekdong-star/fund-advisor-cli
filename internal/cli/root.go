@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/config"
+	"github.com/derekdong-star/fund-advisor-cli/internal/docs"
+	"github.com/derekdong-star/fund-advisor-cli/internal/model"
 	"github.com/derekdong-star/fund-advisor-cli/internal/report"
 	"github.com/derekdong-star/fund-advisor-cli/internal/service"
 )
@@ -26,9 +28,11 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newFetchCmd(&configPath))
 	root.AddCommand(newAnalyzeCmd(&configPath))
 	root.AddCommand(newReportCmd(&configPath))
+	root.AddCommand(newDCAPlanCmd(&configPath))
 	root.AddCommand(newRunCmd(&configPath))
 	root.AddCommand(newBackfillCmd(&configPath))
 	root.AddCommand(newBacktestCmd(&configPath))
+	root.AddCommand(newDocsCmd(&configPath))
 	return root
 }
 
@@ -180,6 +184,40 @@ func newRunCmd(configPath *string) *cobra.Command {
 	return cmd
 }
 
+func newDCAPlanCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	cmd := &cobra.Command{
+		Use:   "dca-plan",
+		Short: "Generate the current DCA plan",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			plan, err := svc.DCAPlan()
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderDCAPlan(*plan, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "dca plan format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered dca plan to a file")
+	return cmd
+}
+
 func newBackfillCmd(configPath *string) *cobra.Command {
 	var days int
 	cmd := &cobra.Command{
@@ -258,4 +296,160 @@ func newBacktestCmd(configPath *string) *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "table", "backtest format: table|markdown|json")
 	cmd.Flags().StringVar(&output, "output", "", "write rendered report to a file")
 	return cmd
+}
+
+func newDocsCmd(configPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "docs",
+		Short: "Export GitBook-ready documentation artifacts",
+	}
+	cmd.AddCommand(newDocsExportCmd(configPath))
+	cmd.AddCommand(newDocsIndexCmd(configPath))
+	cmd.AddCommand(newDocsValidateCmd(configPath))
+	cmd.AddCommand(newDocsPublishCmd(configPath))
+	return cmd
+}
+
+func newDocsExportCmd(configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "export",
+		Short: "Export latest reports into the GitBook docs tree",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			input, err := buildDocsPublishInput(svc)
+			if err != nil {
+				return err
+			}
+			docSvc := docs.NewService(svc.Config())
+			result, err := docSvc.Export(input)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "docs exported to %s\n", result.DocsRoot)
+			return err
+		},
+	}
+}
+
+func newDocsIndexCmd(configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "index",
+		Short: "Generate GitBook index files such as README and SUMMARY",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			input, err := buildDocsPublishInput(svc)
+			if err != nil {
+				return err
+			}
+			docSvc := docs.NewService(svc.Config())
+			result, err := docSvc.Export(input)
+			if err != nil {
+				return err
+			}
+			if err := docSvc.BuildIndex(input, result); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "docs index generated at %s\n", result.DocsRoot)
+			return err
+		},
+	}
+}
+
+func newDocsValidateCmd(configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "Validate the generated GitBook docs tree",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			docSvc := docs.NewService(svc.Config())
+			if err := docSvc.Validate(); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "docs tree is valid: %s\n", svc.Config().Publishing.GitBook.DocsRoot)
+			return err
+		},
+	}
+}
+
+func newDocsPublishCmd(configPath *string) *cobra.Command {
+	var refresh bool
+	var days int
+	cmd := &cobra.Command{
+		Use:   "publish",
+		Short: "Export, index, and validate GitBook docs artifacts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+
+			var input docs.PublishInput
+			if refresh {
+				input, err = buildDocsPublishInputAfterRefresh(cmd.Context(), svc, days)
+			} else {
+				input, err = buildDocsPublishInput(svc)
+			}
+			if err != nil {
+				return err
+			}
+			docSvc := docs.NewService(svc.Config())
+			result, err := docSvc.Publish(input)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "docs published to %s\n", result.DocsRoot)
+			return err
+		},
+	}
+	cmd.Flags().BoolVar(&refresh, "refresh", false, "fetch fresh NAV data and analyze before publishing docs")
+	cmd.Flags().IntVar(&days, "days", 180, "number of recent trading days to fetch when --refresh is enabled")
+	return cmd
+}
+
+func buildDocsPublishInput(svc *service.Service) (docs.PublishInput, error) {
+	analysis, plan, err := svc.CurrentAnalysisAndDCAPlan()
+	if err != nil {
+		return docs.PublishInput{}, err
+	}
+	return buildDocsPublishInputWithAnalysis(svc, analysis, plan), nil
+}
+
+func buildDocsPublishInputAfterRefresh(ctx context.Context, svc *service.Service, days int) (docs.PublishInput, error) {
+	if err := svc.Fetch(ctx, days); err != nil {
+		return docs.PublishInput{}, err
+	}
+	analysis, err := svc.Analyze()
+	if err != nil {
+		return docs.PublishInput{}, err
+	}
+	return buildDocsPublishInputWithAnalysis(svc, analysis, analysis.DCAPlan), nil
+}
+
+func buildDocsPublishInputWithAnalysis(svc *service.Service, analysis *model.AnalysisReport, plan *model.DCAPlanReport) docs.PublishInput {
+	input := docs.PublishInput{Analysis: analysis, Plan: plan}
+	if svc.Config().Publishing.GitBook.IncludeBacktest {
+		backtest, err := svc.Backtest(
+			svc.Config().Publishing.GitBook.BacktestDays,
+			svc.Config().Publishing.GitBook.BacktestRebalanceEvery,
+		)
+		if err != nil {
+			input.BacktestError = err.Error()
+		} else {
+			input.Backtest = backtest
+		}
+	}
+	return input
 }

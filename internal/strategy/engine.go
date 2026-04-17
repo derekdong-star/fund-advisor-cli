@@ -14,6 +14,14 @@ type Engine struct {
 	strategy config.StrategyConfig
 }
 
+type dcaPlanCandidate struct {
+	state     model.PositionState
+	gapWeight float64
+	gapAmount float64
+	priority  int
+	reason    string
+}
+
 func NewEngine(strategy config.StrategyConfig) *Engine {
 	return &Engine{strategy: strategy}
 }
@@ -507,6 +515,243 @@ func stateSignalReason(state model.PositionState) string {
 		return "按目标权重执行"
 	}
 	return strings.Join(state.Reasons, "；")
+}
+
+func (e *Engine) BuildDCAPlan(asOf time.Time, portfolioName string, states []model.PositionState, totalValue float64) model.DCAPlanReport {
+	frequency := strings.TrimSpace(e.strategy.Turnover.DCAFrequency)
+	if frequency == "" {
+		frequency = "monthly"
+	}
+	budget := maxFloat64(0, e.strategy.Turnover.MonthlyDCAAmount)
+	minFundAmount := maxFloat64(0, e.strategy.Turnover.MinDCAFundAmount)
+	maxFunds := e.strategy.Turnover.MaxDCAFunds
+	if maxFunds <= 0 {
+		maxFunds = 3
+	}
+	pauseOnRisk := e.pauseDCAOnRiskEnabled()
+	plan := model.DCAPlanReport{
+		Summary: model.DCAPlanSummary{
+			PortfolioName:      portfolioName,
+			PlanDate:           asOf,
+			Frequency:          frequency,
+			Budget:             budget,
+			PauseOnRiskEnabled: pauseOnRisk,
+			GeneratedAt:        asOf,
+		},
+	}
+	if budget <= 0 {
+		plan.Summary.Notes = append(plan.Summary.Notes, "未设置月度定投预算，本期不生成定投动作")
+		return plan
+	}
+	if minFundAmount > 0 && budget < minFundAmount {
+		plan.Summary.ReserveAmount = budget
+		plan.Summary.Notes = append(plan.Summary.Notes, fmt.Sprintf("本期预算 %.0f 低于单基金最低定投金额 %.0f，暂不执行", budget, minFundAmount))
+		return plan
+	}
+	if totalValue <= 0 {
+		plan.Summary.ReserveAmount = budget
+		plan.Summary.Notes = append(plan.Summary.Notes, "组合市值不可用，月度预算暂全部保留")
+		return plan
+	}
+
+	candidates := make([]dcaPlanCandidate, 0)
+	for _, state := range states {
+		if !state.Position.DCAEnabled {
+			continue
+		}
+		plan.Summary.EligibleFundCount++
+		gapWeight := maxFloat64(0, state.Position.TargetWeight-state.CurrentWeight)
+		gapAmount := gapWeight * totalValue
+		reason := stateSignalReason(state)
+		skipReason := ""
+		switch state.Action {
+		case model.ActionReplaceWatch, model.ActionReduce:
+			skipReason = reason
+		case model.ActionPauseBuy:
+			if pauseOnRisk {
+				skipReason = reason
+			}
+		}
+		if skipReason == "" && gapAmount <= 0 {
+			skipReason = "当前权重已接近或高于目标，本月预算暂不追加"
+		}
+		if skipReason != "" {
+			plan.Skipped = append(plan.Skipped, model.DCASkippedFund{
+				FundCode: state.Position.FundCode,
+				FundName: state.Position.FundName,
+				Action:   state.Action,
+				Reason:   skipReason,
+			})
+			continue
+		}
+		candidates = append(candidates, dcaPlanCandidate{
+			state:     state,
+			gapWeight: gapWeight,
+			gapAmount: gapAmount,
+			priority:  dcaPriority(state, gapWeight),
+			reason:    reason,
+		})
+	}
+
+	if len(candidates) == 0 {
+		plan.Summary.ReserveAmount = budget
+		plan.Summary.Notes = append(plan.Summary.Notes, "当前没有适合继续定投的基金，本月预算暂保留")
+		return plan
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].priority != candidates[j].priority {
+			return candidates[i].priority > candidates[j].priority
+		}
+		if candidates[i].gapAmount != candidates[j].gapAmount {
+			return candidates[i].gapAmount > candidates[j].gapAmount
+		}
+		if candidates[i].state.CurrentWeight != candidates[j].state.CurrentWeight {
+			return candidates[i].state.CurrentWeight < candidates[j].state.CurrentWeight
+		}
+		return candidates[i].state.Position.FundCode < candidates[j].state.Position.FundCode
+	})
+
+	if len(candidates) > maxFunds {
+		plan.Summary.Notes = append(plan.Summary.Notes, fmt.Sprintf("候选定投基金 %d 只，仅保留优先级最高的 %d 只", len(candidates), maxFunds))
+		for _, candidate := range candidates[maxFunds:] {
+			plan.Skipped = append(plan.Skipped, model.DCASkippedFund{
+				FundCode: candidate.state.Position.FundCode,
+				FundName: candidate.state.Position.FundName,
+				Action:   candidate.state.Action,
+				Reason:   "优先级低于本期入选基金，本月暂缓定投",
+			})
+		}
+		candidates = candidates[:maxFunds]
+	}
+	if minFundAmount > 0 {
+		filtered, skipped := filterSmallDCACandidates(candidates, budget, minFundAmount)
+		for _, item := range skipped {
+			plan.Skipped = append(plan.Skipped, model.DCASkippedFund{
+				FundCode: item.state.Position.FundCode,
+				FundName: item.state.Position.FundName,
+				Action:   item.state.Action,
+				Reason:   fmt.Sprintf("按当前预算分配后低于单基金最低定投金额 %.0f，本月暂缓定投", minFundAmount),
+			})
+		}
+		candidates = filtered
+	}
+	if len(candidates) == 0 {
+		plan.Summary.ReserveAmount = budget
+		plan.Summary.Notes = append(plan.Summary.Notes, fmt.Sprintf("当前候选基金分配后均低于单基金最低定投金额 %.0f，本月预算暂保留", minFundAmount))
+		return plan
+	}
+	allocations := distributeDCABudget(budget, candidates)
+	for idx, candidate := range candidates {
+		amount := allocations[idx]
+		if amount <= 0 {
+			plan.Skipped = append(plan.Skipped, model.DCASkippedFund{
+				FundCode: candidate.state.Position.FundCode,
+				FundName: candidate.state.Position.FundName,
+				Action:   candidate.state.Action,
+				Reason:   "预算分配后本期金额为 0，暂不执行",
+			})
+			continue
+		}
+		plan.Items = append(plan.Items, model.DCAPlanItem{
+			FundCode:      candidate.state.Position.FundCode,
+			FundName:      candidate.state.Position.FundName,
+			Role:          candidate.state.Position.Role,
+			Action:        candidate.state.Action,
+			CurrentWeight: candidate.state.CurrentWeight,
+			TargetWeight:  candidate.state.Position.TargetWeight,
+			GapWeight:     candidate.gapWeight,
+			PlannedAmount: amount,
+			Priority:      idx + 1,
+			Reason:        candidate.reason,
+		})
+		plan.Summary.PlannedAmount += amount
+	}
+	plan.Summary.SelectedFundCount = len(plan.Items)
+	plan.Summary.ReserveAmount = maxFloat64(0, budget-plan.Summary.PlannedAmount)
+	if plan.Summary.SelectedFundCount == 0 {
+		plan.Summary.Notes = append(plan.Summary.Notes, "候选基金存在，但本期预算未分配到任何基金")
+	}
+	if plan.Summary.ReserveAmount > 0 {
+		plan.Summary.Notes = append(plan.Summary.Notes, fmt.Sprintf("有 %.0f 元预算未分配，保留为本月机动资金", plan.Summary.ReserveAmount))
+	}
+	if minFundAmount > 0 {
+		plan.Summary.Notes = append(plan.Summary.Notes, fmt.Sprintf("已应用单基金最低定投金额 %.0f 元", minFundAmount))
+	}
+	if pauseOnRisk {
+		plan.Summary.Notes = append(plan.Summary.Notes, "已启用风险暂停规则，`PAUSE_BUY/REDUCE/REPLACE_WATCH` 基金不进入本月定投")
+	}
+	return plan
+}
+
+func (e *Engine) pauseDCAOnRiskEnabled() bool {
+	if e.strategy.Turnover.PauseDCAOnRisk == nil {
+		return true
+	}
+	return *e.strategy.Turnover.PauseDCAOnRisk
+}
+
+func dcaPriority(state model.PositionState, gapWeight float64) int {
+	priority := int(gapWeight * 10000)
+	if state.Action == model.ActionBuy {
+		priority += 3000
+	}
+	if state.Position.Role == "core" {
+		priority += 2000
+	}
+	if state.Position.Protected {
+		priority += 500
+	}
+	return priority
+}
+
+func distributeDCABudget(budget float64, candidates []dcaPlanCandidate) []float64 {
+	allocations := make([]float64, len(candidates))
+	if budget <= 0 || len(candidates) == 0 {
+		return allocations
+	}
+	var totalGapAmount float64
+	for _, candidate := range candidates {
+		totalGapAmount += candidate.gapAmount
+	}
+	if totalGapAmount <= 0 {
+		equalAmount := budget / float64(len(candidates))
+		for idx := range allocations {
+			allocations[idx] = equalAmount
+		}
+		return allocations
+	}
+	for idx, candidate := range candidates {
+		share := budget * candidate.gapAmount / totalGapAmount
+		allocations[idx] = minFloat64(share, candidate.gapAmount)
+	}
+	return allocations
+}
+
+func filterSmallDCACandidates(candidates []dcaPlanCandidate, budget, minFundAmount float64) ([]dcaPlanCandidate, []dcaPlanCandidate) {
+	if minFundAmount <= 0 || len(candidates) == 0 {
+		return candidates, nil
+	}
+	working := append([]dcaPlanCandidate(nil), candidates...)
+	skipped := make([]dcaPlanCandidate, 0)
+	for len(working) > 0 {
+		allocations := distributeDCABudget(budget, working)
+		filtered := make([]dcaPlanCandidate, 0, len(working))
+		removed := make([]dcaPlanCandidate, 0)
+		for idx, candidate := range working {
+			if allocations[idx] < minFundAmount {
+				removed = append(removed, candidate)
+				continue
+			}
+			filtered = append(filtered, candidate)
+		}
+		if len(removed) == 0 {
+			return working, skipped
+		}
+		skipped = append(skipped, removed...)
+		working = filtered
+	}
+	return nil, skipped
 }
 
 func isPreferredDCAState(states []model.PositionState, fundName string) bool {

@@ -46,6 +46,8 @@ func New(configPath string) (*Service, error) {
 
 func (s *Service) Close() error { return s.store.Close() }
 
+func (s *Service) Config() *config.Config { return s.config }
+
 func (s *Service) Validate() error { return s.config.Validate() }
 
 func (s *Service) SyncPositions() error {
@@ -179,6 +181,8 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 		})
 	}
 	reportData := s.engine.Analyze(s.config.Portfolio.Name, states, candidates)
+	dcaPlan := s.engine.BuildDCAPlan(reportData.Summary.RunDate, s.config.Portfolio.Name, reportData.Position, reportData.Summary.PortfolioValue)
+	reportData.DCAPlan = &dcaPlan
 	if save {
 		runID, err := s.store.SaveAnalysis(reportData)
 		if err != nil {
@@ -199,6 +203,31 @@ func (s *Service) RenderCurrent(format string) (string, error) {
 		return "", err
 	}
 	return report.Render(*reportData, format)
+}
+
+func (s *Service) CurrentAnalysisAndDCAPlan() (*model.AnalysisReport, *model.DCAPlanReport, error) {
+	analysis, err := s.CurrentReport()
+	if err != nil {
+		return nil, nil, err
+	}
+	if analysis.DCAPlan != nil {
+		return analysis, analysis.DCAPlan, nil
+	}
+	plan := s.engine.BuildDCAPlan(analysis.Summary.RunDate, s.config.Portfolio.Name, analysis.Position, analysis.Summary.PortfolioValue)
+	analysis.DCAPlan = &plan
+	return analysis, &plan, nil
+}
+
+func (s *Service) DCAPlan() (*model.DCAPlanReport, error) {
+	analysis, err := s.CurrentReport()
+	if err != nil {
+		return nil, err
+	}
+	if analysis.DCAPlan != nil {
+		return analysis.DCAPlan, nil
+	}
+	plan := s.engine.BuildDCAPlan(analysis.Summary.RunDate, s.config.Portfolio.Name, analysis.Position, analysis.Summary.PortfolioValue)
+	return &plan, nil
 }
 
 func (s *Service) Run(ctx context.Context, days int, format string, out io.Writer) error {

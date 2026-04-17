@@ -17,8 +17,23 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 			RunDate:        now,
 			PortfolioValue: 100000,
 			ActionCounts: map[model.Action]int{
-				model.ActionReduce: 1,
+				model.ActionHold:     1,
+				model.ActionPauseBuy: 1,
+				model.ActionReduce:   1,
 			},
+		},
+		Signals: []model.FundSignal{
+			{FundName: "Hold Fund", Action: model.ActionHold, CurrentWeight: 0.10, TargetWeight: 0.10, Return20D: 0.02, Return60D: 0.04, Reason: "继续持有"},
+			{FundName: "Pause Fund", Action: model.ActionPauseBuy, CurrentWeight: 0.15, TargetWeight: 0.10, Return20D: -0.01, Return60D: -0.03, Reason: "先暂停加仓"},
+		},
+		DCAPlan: &model.DCAPlanReport{
+			Summary: model.DCAPlanSummary{ReserveAmount: 1000},
+			Items: []model.DCAPlanItem{{
+				FundName:      "Monthly Core",
+				PlannedAmount: 4000,
+				Priority:      1,
+				Reason:        "按月定投",
+			}},
 		},
 		Recommendations: []model.TradeRecommendation{{
 			Kind:            "SWAP",
@@ -29,27 +44,42 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 			Reason:          "replacement",
 			CreatedAt:       now,
 		}},
-		ExecutionPlan: &model.ExecutionPlan{
-			GrossSellAmount: 5000,
-			GrossBuyAmount:  5000,
-			SwapAmount:      5000,
-			Steps: []model.ExecutionStep{
-				{Order: 1, Action: "SELL", Fund: "Old Fund", RelatedFund: "New Fund", Amount: 5000, Reason: "replacement"},
-				{Order: 2, Action: "BUY", Fund: "New Fund", RelatedFund: "Old Fund", Amount: 5000, FundingSource: "卖出 Old Fund", Reason: "replacement"},
-			},
-		},
 	})
-	if !strings.Contains(rendered, "## Recommended Actions") {
-		t.Fatalf("expected recommendation section in markdown output")
+	if !strings.Contains(rendered, "# test Investor Playbook") {
+		t.Fatalf("expected playbook heading in markdown output")
 	}
-	if !strings.Contains(rendered, "| SWAP | Old Fund | New Fund | 5.00% | 5000 | replacement |") {
+	if !strings.Contains(rendered, "## Replacement Watch") {
+		t.Fatalf("expected replacement section in markdown output")
+	}
+	if !strings.Contains(rendered, "| Old Fund | New Fund | 5000 | 5.00% | replacement |") {
 		t.Fatalf("expected rendered recommendation row, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "## Execution Plan") {
-		t.Fatalf("expected execution plan section, got %s", rendered)
+	if !strings.Contains(rendered, "## Continue Holding") {
+		t.Fatalf("expected hold section, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "## Pause Adding") {
+		t.Fatalf("expected pause section, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "## Continue DCA") {
+		t.Fatalf("expected continue dca section, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| Monthly Core | 4000 | 4.00% | 按月定投 |") {
+		t.Fatalf("expected dca row from monthly plan, got %s", rendered)
+	}
+	if strings.Contains(rendered, "## Monthly DCA Snapshot") {
+		t.Fatalf("did not expect separate monthly dca snapshot, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "## Execution Order") {
+		t.Fatalf("expected execution order section, got %s", rendered)
 	}
 	if !strings.Contains(rendered, "| 2 | BUY | New Fund | Old Fund | 5000 | 卖出 Old Fund | replacement |") {
-		t.Fatalf("expected execution plan row, got %s", rendered)
+		t.Fatalf("expected swap execution row, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| 3 | BUY | Monthly Core | - | 4000 | 组合卖出回笼资金 | 按月定投 |") {
+		t.Fatalf("expected dca execution row, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "- Monthly DCA Reserve: `1000`") {
+		t.Fatalf("expected monthly dca reserve note, got %s", rendered)
 	}
 }
 
@@ -94,5 +124,54 @@ func TestRenderBacktestMarkdown(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "| Total Return | 8.00% |") {
 		t.Fatalf("expected total return row, got %s", rendered)
+	}
+}
+
+func TestRenderDCAPlanMarkdown(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+	rendered, err := RenderDCAPlan(model.DCAPlanReport{
+		Summary: model.DCAPlanSummary{
+			PortfolioName:      "test",
+			PlanDate:           now,
+			Frequency:          "monthly",
+			Budget:             5000,
+			PlannedAmount:      4000,
+			ReserveAmount:      1000,
+			EligibleFundCount:  3,
+			SelectedFundCount:  1,
+			PauseOnRiskEnabled: true,
+			Notes:              []string{"保留部分预算作为机动资金"},
+		},
+		Items: []model.DCAPlanItem{{
+			Priority:      1,
+			FundName:      "Core Fund",
+			Role:          "core",
+			CurrentWeight: 0.10,
+			TargetWeight:  0.20,
+			GapWeight:     0.10,
+			PlannedAmount: 4000,
+			Reason:        "继续定投",
+		}},
+		Skipped: []model.DCASkippedFund{{
+			FundName: "Paused Fund",
+			Action:   model.ActionPauseBuy,
+			Reason:   "短期风险偏高",
+		}},
+	}, "markdown")
+	if err != nil {
+		t.Fatalf("RenderDCAPlan() error = %v", err)
+	}
+	if !strings.Contains(rendered, "# test DCA Plan") {
+		t.Fatalf("expected dca plan heading, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "## Invest This Period") {
+		t.Fatalf("expected invest section, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| 1 | Core Fund | core | 10.00% | 20.00% | 10.00% | 4000 | 继续定投 |") {
+		t.Fatalf("expected item row, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| Paused Fund | PAUSE_BUY | 短期风险偏高 |") {
+		t.Fatalf("expected skipped row, got %s", rendered)
 	}
 }

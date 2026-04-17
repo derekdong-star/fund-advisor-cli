@@ -352,3 +352,159 @@ func TestAnalyzePrefersDCAFundsForBuyRecommendations(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildDCAPlanSkipsRiskFundsAndCapsSelection(t *testing.T) {
+	t.Parallel()
+	cfg := config.Default()
+	cfg.Strategy.Turnover.MonthlyDCAAmount = 6000
+	cfg.Strategy.Turnover.MaxDCAFunds = 2
+	engine := NewEngine(cfg.Strategy)
+	now := time.Now().UTC()
+	states := []model.PositionState{
+		{
+			Position:      model.Position{FundCode: "A", FundName: "Core DCA", Role: "core", DCAEnabled: true, TargetWeight: 0.40, Protected: true},
+			CurrentWeight: 0.10,
+			Action:        model.ActionBuy,
+			Reasons:       []string{"继续按计划定投"},
+		},
+		{
+			Position:      model.Position{FundCode: "B", FundName: "Dividend DCA", Role: "core", DCAEnabled: true, TargetWeight: 0.30},
+			CurrentWeight: 0.15,
+			Action:        model.ActionBuy,
+			Reasons:       []string{"当前权重低于目标"},
+		},
+		{
+			Position:      model.Position{FundCode: "C", FundName: "Satellite DCA", Role: "satellite", DCAEnabled: true, TargetWeight: 0.15},
+			CurrentWeight: 0.05,
+			Action:        model.ActionHold,
+			Reasons:       []string{"继续观察"},
+		},
+		{
+			Position:      model.Position{FundCode: "D", FundName: "Paused DCA", Role: "core", DCAEnabled: true, TargetWeight: 0.15},
+			CurrentWeight: 0.05,
+			Action:        model.ActionPauseBuy,
+			Reasons:       []string{"短期风险偏高"},
+		},
+	}
+
+	plan := engine.BuildDCAPlan(now, "test", states, 100000)
+	if got := len(plan.Items); got != 2 {
+		t.Fatalf("selected items = %d, want 2", got)
+	}
+	if got := plan.Items[0].FundName; got != "Core DCA" {
+		t.Fatalf("first selected fund = %s, want Core DCA", got)
+	}
+	if got := plan.Items[1].FundName; got != "Dividend DCA" {
+		t.Fatalf("second selected fund = %s, want Dividend DCA", got)
+	}
+	if plan.Summary.PlannedAmount != 6000 {
+		t.Fatalf("planned amount = %.2f, want 6000", plan.Summary.PlannedAmount)
+	}
+	if plan.Summary.ReserveAmount != 0 {
+		t.Fatalf("reserve amount = %.2f, want 0", plan.Summary.ReserveAmount)
+	}
+	skipped := map[string]string{}
+	for _, item := range plan.Skipped {
+		skipped[item.FundName] = item.Reason
+	}
+	if got := skipped["Paused DCA"]; got != "短期风险偏高" {
+		t.Fatalf("paused skip reason = %q, want 短期风险偏高", got)
+	}
+	if got := skipped["Satellite DCA"]; got != "优先级低于本期入选基金，本月暂缓定投" {
+		t.Fatalf("satellite skip reason = %q, want priority skip", got)
+	}
+	if !plan.Summary.PauseOnRiskEnabled {
+		t.Fatalf("pause on risk should be enabled")
+	}
+}
+
+func TestBuildDCAPlanAllowsPauseBuyWhenRiskPauseDisabled(t *testing.T) {
+	t.Parallel()
+	cfg := config.Default()
+	disabled := false
+	cfg.Strategy.Turnover.PauseDCAOnRisk = &disabled
+	cfg.Strategy.Turnover.MonthlyDCAAmount = 5000
+	engine := NewEngine(cfg.Strategy)
+	now := time.Now().UTC()
+	states := []model.PositionState{
+		{
+			Position:      model.Position{FundCode: "A", FundName: "Paused But Allowed", Role: "core", DCAEnabled: true, TargetWeight: 0.30},
+			CurrentWeight: 0.10,
+			Action:        model.ActionPauseBuy,
+			Reasons:       []string{"估值偏高，观察"},
+		},
+	}
+
+	plan := engine.BuildDCAPlan(now, "test", states, 100000)
+	if got := len(plan.Items); got != 1 {
+		t.Fatalf("selected items = %d, want 1", got)
+	}
+	if plan.Items[0].FundName != "Paused But Allowed" {
+		t.Fatalf("selected fund = %s, want Paused But Allowed", plan.Items[0].FundName)
+	}
+	if plan.Summary.PauseOnRiskEnabled {
+		t.Fatalf("pause on risk should be disabled")
+	}
+}
+
+func TestBuildDCAPlanSkipsTinyAllocationsBelowMinimum(t *testing.T) {
+	t.Parallel()
+	cfg := config.Default()
+	cfg.Strategy.Turnover.MonthlyDCAAmount = 5000
+	cfg.Strategy.Turnover.MinDCAFundAmount = 1000
+	engine := NewEngine(cfg.Strategy)
+	now := time.Now().UTC()
+	states := []model.PositionState{
+		{
+			Position:      model.Position{FundCode: "A", FundName: "Primary One", Role: "core", DCAEnabled: true, TargetWeight: 0.15},
+			CurrentWeight: 0.0534,
+			Action:        model.ActionBuy,
+			Reasons:       []string{"继续定投"},
+		},
+		{
+			Position:      model.Position{FundCode: "B", FundName: "Primary Two", Role: "core", DCAEnabled: true, TargetWeight: 0.15},
+			CurrentWeight: 0.0534,
+			Action:        model.ActionBuy,
+			Reasons:       []string{"继续定投"},
+		},
+		{
+			Position:      model.Position{FundCode: "C", FundName: "Tiny Residual", Role: "core", DCAEnabled: true, TargetWeight: 0.10},
+			CurrentWeight: 0.0992,
+			Action:        model.ActionHold,
+			Reasons:       []string{"继续观察"},
+		},
+	}
+
+	plan := engine.BuildDCAPlan(now, "test", states, 262100)
+	if got := len(plan.Items); got != 2 {
+		t.Fatalf("selected items = %d, want 2", got)
+	}
+	for _, item := range plan.Items {
+		if item.PlannedAmount < 1000 {
+			t.Fatalf("planned amount = %.2f, want >= 1000", item.PlannedAmount)
+		}
+	}
+	skipped := map[string]string{}
+	for _, item := range plan.Skipped {
+		skipped[item.FundName] = item.Reason
+	}
+	if got := skipped["Tiny Residual"]; got != "按当前预算分配后低于单基金最低定投金额 1000，本月暂缓定投" {
+		t.Fatalf("tiny residual skip reason = %q, want minimum-amount skip", got)
+	}
+}
+
+func TestBuildDCAPlanReservesBudgetWhenBelowMinimumAmount(t *testing.T) {
+	t.Parallel()
+	cfg := config.Default()
+	cfg.Strategy.Turnover.MonthlyDCAAmount = 500
+	cfg.Strategy.Turnover.MinDCAFundAmount = 1000
+	engine := NewEngine(cfg.Strategy)
+	now := time.Now().UTC()
+	plan := engine.BuildDCAPlan(now, "test", nil, 100000)
+	if got := len(plan.Items); got != 0 {
+		t.Fatalf("selected items = %d, want 0", got)
+	}
+	if plan.Summary.ReserveAmount != 500 {
+		t.Fatalf("reserve amount = %.2f, want 500", plan.Summary.ReserveAmount)
+	}
+}

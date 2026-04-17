@@ -35,7 +35,36 @@ strategy:
         min_swap_score: 7
         max_protected_reduce_weight: 0.22
         monthly_dca_amount: 5000
+        min_dca_fund_amount: 1000
+        dca_frequency: monthly
+        max_dca_funds: 3
+        pause_dca_on_risk: true
         prefer_dca: true
+publishing:
+    gitbook:
+        enabled: true
+        mode: git-sync
+        docs_root: ../docs/gitbook
+        project_directory: docs/gitbook
+        generate_homepage: true
+        generate_summary: true
+        include_daily: true
+        include_dca_plan: true
+        include_backtest: true
+        hide_backtest_when_unavailable: true
+        backtest_days: 120
+        backtest_rebalance_every: 20
+        archive_by_run_date: true
+        overwrite_latest: true
+        retain_days: 0
+        site_title: Derek Fund Advisor
+        site_description: Low-turnover, long-term holding, DCA-first portfolio reports
+        strategy_overview_path: strategy/overview.md
+        risk_disclosure_path: about/risk.md
+        visibility: public
+        organization_id: ""
+        site_id: ""
+        space_id: ""
 funds:
     - code: "000979"
       name: 景顺长城沪港深精选股票A

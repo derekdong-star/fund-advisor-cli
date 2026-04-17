@@ -30,6 +30,41 @@ strategy:
         max_expense_ratio: 0.008
         core_require_index: true
         prefer_benchmark_match: true
+    turnover:
+        mode: low_turnover
+        min_swap_score: 7
+        max_protected_reduce_weight: 0.22
+        monthly_dca_amount: 5000
+        min_dca_fund_amount: 1000
+        dca_frequency: monthly
+        max_dca_funds: 3
+        pause_dca_on_risk: true
+        prefer_dca: true
+publishing:
+    gitbook:
+        enabled: true
+        mode: git-sync
+        docs_root: ../docs/gitbook
+        project_directory: docs/gitbook
+        generate_homepage: true
+        generate_summary: true
+        include_daily: true
+        include_dca_plan: true
+        include_backtest: false
+        hide_backtest_when_unavailable: true
+        backtest_days: 120
+        backtest_rebalance_every: 20
+        archive_by_run_date: true
+        overwrite_latest: true
+        retain_days: 0
+        site_title: Derek Fund Advisor
+        site_description: Low-turnover, long-term holding, DCA-first portfolio reports
+        strategy_overview_path: strategy/overview.md
+        risk_disclosure_path: about/risk.md
+        visibility: public
+        organization_id: ""
+        site_id: ""
+        space_id: ""
 funds:
     - code: "000979"
       name: 景顺长城沪港深精选股票A
@@ -39,6 +74,8 @@ funds:
       benchmark: hs300_hk_mix
       role: satellite
       status: active
+      protected: true
+      dca_enabled: true
     - code: "012060"
       name: 富国全球消费精选混合(QDII)人民币A
       category: active_qdii
@@ -63,6 +100,7 @@ funds:
       benchmark: hsi_div_lowvol
       role: core
       status: active
+      dca_enabled: true
     - code: "090013"
       name: 大成竞争优势混合A
       category: active_cn_equity
@@ -87,6 +125,7 @@ funds:
       benchmark: sp500
       role: core
       status: active
+      dca_enabled: true
     - code: "009052"
       name: 易方达中证红利ETF联接发起式C
       category: cn_dividend
@@ -95,6 +134,7 @@ funds:
       benchmark: csi_dividend
       role: core
       status: active
+      dca_enabled: true
     - code: "012920"
       name: 易方达全球成长精选混合(QDII)人民币A
       category: active_qdii
