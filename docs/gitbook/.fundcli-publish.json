@@ -1,6 +1,10 @@
 {
-  "last_run_date": "2026-04-16",
+  "last_run_date": "2026-04-17",
   "latest": {
+    "backtest": {
+      "label": "Strategy Backtest",
+      "path": "latest/backtest.md"
+    },
     "daily": {
       "label": "Daily Playbook",
       "path": "latest/daily.md"
@@ -11,13 +15,17 @@
     }
   },
   "archive": {
+    "backtest": {
+      "label": "Archived Strategy Backtest",
+      "path": "archive/2026/04/17/backtest.md"
+    },
     "daily": {
       "label": "Archived Daily Playbook",
-      "path": "archive/2026/04/16/daily.md"
+      "path": "archive/2026/04/17/daily.md"
     },
     "dca-plan": {
       "label": "Archived DCA Plan",
-      "path": "archive/2026/04/16/dca-plan.md"
+      "path": "archive/2026/04/17/dca-plan.md"
     }
   }
 }
