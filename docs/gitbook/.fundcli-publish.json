@@ -1,0 +1,23 @@
+{
+  "last_run_date": "2026-04-16",
+  "latest": {
+    "daily": {
+      "label": "Daily Playbook",
+      "path": "latest/daily.md"
+    },
+    "dca-plan": {
+      "label": "Monthly DCA Plan",
+      "path": "latest/dca-plan.md"
+    }
+  },
+  "archive": {
+    "daily": {
+      "label": "Archived Daily Playbook",
+      "path": "archive/2026/04/16/daily.md"
+    },
+    "dca-plan": {
+      "label": "Archived DCA Plan",
+      "path": "archive/2026/04/16/dca-plan.md"
+    }
+  }
+}
