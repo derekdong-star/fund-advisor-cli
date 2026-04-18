@@ -1,5 +1,7 @@
 # Thread Handoff
 
+Start each new session by reading `RULE.md` first, then `THREAD_HANDOFF.md`.
+
 ## Project
 - Repo path: `/Users/dhw/Documents/derekdong-star/fund-advisor-cli`
 - Git remote: `git@github.com:derekdong-star/fund-advisor-cli.git`
