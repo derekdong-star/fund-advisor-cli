@@ -22,37 +22,60 @@ func renderHomepage(cfg *config.Config, input PublishInput, result *ExportResult
 		lines = append(lines, desc, "")
 	}
 	lines = append(lines,
-		"## Latest Summary",
+		"## How To Read",
 		"",
-		fmt.Sprintf("- Latest Run Date: `%s`", analysis.Summary.RunDate.Format("2006-01-02")),
+		"- Start with the latest daily playbook for the current action list.",
+		"- Use the monthly DCA plan for fresh capital allocation.",
+	)
+	if _, ok := result.Latest["backtest"]; ok {
+		lines = append(lines, "- Review the strategy backtest as a validation page, not a prediction tool.")
+	} else if strings.TrimSpace(input.BacktestError) != "" {
+		lines = append(lines, "- Strategy backtest is hidden for this run because historical data is unavailable.")
+	}
+	lines = append(lines,
+		"",
+		"## Latest Snapshot",
+		"",
+		fmt.Sprintf("- Run Date: `%s`", analysis.Summary.RunDate.Format("2006-01-02")),
 		fmt.Sprintf("- Portfolio Value: `%.2f`", analysis.Summary.PortfolioValue),
 		fmt.Sprintf("- Weighted Day Change: `%.2f%%`", analysis.Summary.WeightedDayChangePct*100),
 	)
 	if input.Plan != nil {
 		lines = append(lines, fmt.Sprintf("- Monthly DCA Planned: `%.0f`", input.Plan.Summary.PlannedAmount))
 	}
-	lines = append(lines, "", "## Latest Reports", "")
+	lines = append(lines, "", "## Start Here", "")
+	hasLatest := false
 	for _, key := range []string{"daily", "dca-plan", "backtest"} {
 		if item, ok := result.Latest[key]; ok {
 			lines = append(lines, fmt.Sprintf("- [%s](%s)", item.Label, filepath.ToSlash(item.Path)))
+			hasLatest = true
 		}
+	}
+	if !hasLatest {
+		lines = append(lines, "- Latest report pages are not available yet.")
 	}
 	if cfg.Publishing.GitBook.ArchiveByRunDate {
 		lines = append(lines, "", "## Archive", "")
 		lines = append(lines, fmt.Sprintf("- [Browse Archive](%s)", filepath.ToSlash(filepath.Join(archiveDirName, readmeName))))
-		if item, ok := result.Archive["daily"]; ok {
-			lines = append(lines, fmt.Sprintf("- [Latest Archived Daily](%s)", filepath.ToSlash(item.Path)))
-		}
 		if dayIndex := latestArchiveIndexPath(result); dayIndex != "" {
 			lines = append(lines, fmt.Sprintf("- [Latest Snapshot Folder](%s)", filepath.ToSlash(dayIndex)))
+		}
+		if item, ok := result.Archive["daily"]; ok {
+			lines = append(lines, fmt.Sprintf("- [Latest Archived Daily](%s)", filepath.ToSlash(item.Path)))
 		}
 	}
 	lines = append(lines,
 		"",
-		"## Strategy",
+		"## Methodology",
 		"",
-		fmt.Sprintf("- [Overview](%s)", filepath.ToSlash(cfg.Publishing.GitBook.StrategyOverviewPath)),
+		fmt.Sprintf("- [Strategy Overview](%s)", filepath.ToSlash(cfg.Publishing.GitBook.StrategyOverviewPath)),
 		fmt.Sprintf("- [Risk Disclosure](%s)", filepath.ToSlash(cfg.Publishing.GitBook.RiskDisclosurePath)),
+		"",
+		"## Publishing Note",
+		"",
+		"- Generated automatically from the portfolio rule engine.",
+		"- Market data and fund NAV updates may be delayed or incomplete.",
+		"- This material is for tracking and review only, not investment advice.",
 	)
 	return strings.Join(lines, "\n") + "\n"
 }
