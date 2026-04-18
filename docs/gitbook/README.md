@@ -2,14 +2,20 @@
 
 Low-turnover, long-term holding, DCA-first portfolio reports
 
-## Latest Summary
+## How To Read
 
-- Latest Run Date: `2026-04-17`
+- Start with the latest daily playbook for the current action list.
+- Use the monthly DCA plan for fresh capital allocation.
+- Review the strategy backtest as a validation page, not a prediction tool.
+
+## Latest Snapshot
+
+- Run Date: `2026-04-18`
 - Portfolio Value: `262100.00`
 - Weighted Day Change: `1.14%`
 - Monthly DCA Planned: `5000`
 
-## Latest Reports
+## Start Here
 
 - [Daily Playbook](latest/daily.md)
 - [Monthly DCA Plan](latest/dca-plan.md)
@@ -18,10 +24,16 @@ Low-turnover, long-term holding, DCA-first portfolio reports
 ## Archive
 
 - [Browse Archive](archive/README.md)
-- [Latest Archived Daily](archive/2026/04/17/daily.md)
-- [Latest Snapshot Folder](archive/2026/04/17/README.md)
+- [Latest Snapshot Folder](archive/2026/04/18/README.md)
+- [Latest Archived Daily](archive/2026/04/18/daily.md)
 
-## Strategy
+## Methodology
 
-- [Overview](strategy/overview.md)
+- [Strategy Overview](strategy/overview.md)
 - [Risk Disclosure](about/risk.md)
+
+## Publishing Note
+
+- Generated automatically from the portfolio rule engine.
+- Market data and fund NAV updates may be delayed or incomplete.
+- This material is for tracking and review only, not investment advice.

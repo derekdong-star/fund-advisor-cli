@@ -1,5 +1,5 @@
 {
-  "last_run_date": "2026-04-17",
+  "last_run_date": "2026-04-18",
   "latest": {
     "backtest": {
       "label": "Strategy Backtest",
@@ -17,15 +17,15 @@
   "archive": {
     "backtest": {
       "label": "Archived Strategy Backtest",
-      "path": "archive/2026/04/17/backtest.md"
+      "path": "archive/2026/04/18/backtest.md"
     },
     "daily": {
       "label": "Archived Daily Playbook",
-      "path": "archive/2026/04/17/daily.md"
+      "path": "archive/2026/04/18/daily.md"
     },
     "dca-plan": {
       "label": "Archived DCA Plan",
-      "path": "archive/2026/04/17/dca-plan.md"
+      "path": "archive/2026/04/18/dca-plan.md"
     }
   }
 }
