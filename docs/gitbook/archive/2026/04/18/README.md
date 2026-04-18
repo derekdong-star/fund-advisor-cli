@@ -4,6 +4,5 @@
 
 ## Reports
 
-- [Backtest](backtest.md)
 - [Daily](daily.md)
 - [Dca Plan](dca-plan.md)

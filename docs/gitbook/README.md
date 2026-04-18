@@ -6,20 +6,19 @@ Low-turnover, long-term holding, DCA-first portfolio reports
 
 - Start with the latest daily playbook for the current action list.
 - Use the monthly DCA plan for fresh capital allocation.
-- Review the strategy backtest as a validation page, not a prediction tool.
+- Strategy backtest is hidden for this run because historical data is unavailable.
 
 ## Latest Snapshot
 
 - Run Date: `2026-04-18`
 - Portfolio Value: `262100.00`
-- Weighted Day Change: `1.14%`
+- Weighted Day Change: `0.83%`
 - Monthly DCA Planned: `5000`
 
 ## Start Here
 
 - [Daily Playbook](latest/daily.md)
 - [Monthly DCA Plan](latest/dca-plan.md)
-- [Strategy Backtest](latest/backtest.md)
 
 ## Archive
 

@@ -1,10 +1,6 @@
 {
   "last_run_date": "2026-04-18",
   "latest": {
-    "backtest": {
-      "label": "Strategy Backtest",
-      "path": "latest/backtest.md"
-    },
     "daily": {
       "label": "Daily Playbook",
       "path": "latest/daily.md"
@@ -15,10 +11,6 @@
     }
   },
   "archive": {
-    "backtest": {
-      "label": "Archived Strategy Backtest",
-      "path": "archive/2026/04/18/backtest.md"
-    },
     "daily": {
       "label": "Archived Daily Playbook",
       "path": "archive/2026/04/18/daily.md"
