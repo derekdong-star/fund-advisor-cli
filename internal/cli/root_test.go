@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -223,6 +224,7 @@ func TestDocsPublishCommandGeneratesGitBookTree(t *testing.T) {
 	}
 
 	docsRoot := filepath.Join(dir, "docs", "gitbook")
+	archiveDayDir := latestArchiveDayDir(t, docsRoot)
 	for _, rel := range []string{
 		".gitbook.yaml",
 		"README.md",
@@ -230,11 +232,9 @@ func TestDocsPublishCommandGeneratesGitBookTree(t *testing.T) {
 		"latest/daily.md",
 		"latest/dca-plan.md",
 		"archive/README.md",
-		"archive/2026/README.md",
-		"archive/2026/04/README.md",
-		"archive/2026/04/16/README.md",
-		"strategy/overview.md",
-		"about/risk.md",
+		filepath.Join("archive", archiveDayDir, "README.md"),
+		filepath.Join("strategy", "overview.md"),
+		filepath.Join("about", "risk.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(docsRoot, rel)); err != nil {
 			t.Fatalf("expected generated docs file %s: %v", rel, err)
@@ -333,8 +333,8 @@ func TestDocsPublishRespectsArchiveByRunDateFlag(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(docsRoot, "archive", "README.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected archive index to be absent when archive_by_run_date disabled, got err=%v", err)
 	}
-	if _, err := os.Stat(filepath.Join(docsRoot, "archive", "2026", "04", "16", "daily.md")); !os.IsNotExist(err) {
-		t.Fatalf("expected archived daily report to be absent when archive_by_run_date disabled, got err=%v", err)
+	if _, err := os.Stat(filepath.Join(docsRoot, "archive")); !os.IsNotExist(err) {
+		t.Fatalf("expected archive directory to be absent when archive_by_run_date disabled, got err=%v", err)
 	}
 }
 
@@ -427,10 +427,11 @@ func TestDocsPublishGeneratesBacktestPageWhenEnabled(t *testing.T) {
 	}
 
 	docsRoot := filepath.Join(dir, "docs", "gitbook")
+	archiveDayDir := latestArchiveDayDir(t, docsRoot)
 	if _, err := os.Stat(filepath.Join(docsRoot, "latest", "backtest.md")); err != nil {
 		t.Fatalf("expected generated backtest page: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(docsRoot, "archive", "2026", "04", "16", "backtest.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(docsRoot, "archive", archiveDayDir, "backtest.md")); err != nil {
 		t.Fatalf("expected archived backtest page: %v", err)
 	}
 }
@@ -460,14 +461,17 @@ func TestDocsPublishPrunesExpiredArchiveSnapshots(t *testing.T) {
 	}
 
 	docsRoot := filepath.Join(dir, "docs", "gitbook")
-	keptDayDir := filepath.Join(docsRoot, "archive", "2026", "04", "12")
+	currentRunDate := time.Now().UTC()
+	keptDate := currentRunDate.AddDate(0, 0, -4)
+	keptDayDir := filepath.Join(docsRoot, "archive", keptDate.Format("2006"), keptDate.Format("01"), keptDate.Format("02"))
 	if err := os.MkdirAll(keptDayDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(keptDayDir, "daily.md"), []byte("# keep\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	staleDayDir := filepath.Join(docsRoot, "archive", "2026", "04", "11")
+	staleDate := currentRunDate.AddDate(0, 0, -5)
+	staleDayDir := filepath.Join(docsRoot, "archive", staleDate.Format("2006"), staleDate.Format("01"), staleDate.Format("02"))
 	if err := os.MkdirAll(staleDayDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -488,8 +492,8 @@ func TestDocsPublishPrunesExpiredArchiveSnapshots(t *testing.T) {
 	if _, err := os.Stat(staleDayDir); !os.IsNotExist(err) {
 		t.Fatalf("expected stale archive snapshot to be removed, got err=%v", err)
 	}
-	if _, err := os.Stat(filepath.Join(docsRoot, "archive", "2026", "04", "12", "daily.md")); err != nil {
-		t.Fatalf("expected current archive snapshot to remain, got err=%v", err)
+	if _, err := os.Stat(keptDayDir); err != nil {
+		t.Fatalf("expected current archive snapshot directory to remain, got err=%v", err)
 	}
 }
 
@@ -544,9 +548,10 @@ func TestDocsPublishRemovesStaleBacktestArtifactsWhenUnavailable(t *testing.T) {
 	}
 
 	docsRoot := filepath.Join(dir, "docs", "gitbook")
+	archiveDayDir := latestArchiveDayDir(t, docsRoot)
 	for _, rel := range []string{
 		"latest/backtest.md",
-		"archive/2026/04/16/backtest.md",
+		filepath.Join("archive", archiveDayDir, "backtest.md"),
 	} {
 		if _, err := os.Stat(filepath.Join(docsRoot, rel)); !os.IsNotExist(err) {
 			t.Fatalf("expected stale backtest artifact %s to be removed, got err=%v", rel, err)
@@ -600,5 +605,93 @@ func TestDocsPublishHidesBacktestWhenUnavailableByDefault(t *testing.T) {
 	docsRoot := filepath.Join(dir, "docs", "gitbook")
 	if _, err := os.Stat(filepath.Join(docsRoot, "latest", "backtest.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected backtest page to be hidden when unavailable, got err=%v", err)
+	}
+}
+
+func latestArchiveDayDir(t *testing.T, docsRoot string) string {
+	t.Helper()
+	archiveRoot := filepath.Join(docsRoot, "archive")
+	years, err := listChildDirs(archiveRoot)
+	if err != nil {
+		t.Fatalf("listChildDirs(%s) error = %v", archiveRoot, err)
+	}
+	if len(years) == 0 {
+		t.Fatalf("expected at least one archive year directory")
+	}
+	months, err := listChildDirs(filepath.Join(archiveRoot, years[0]))
+	if err != nil {
+		t.Fatalf("listChildDirs(months) error = %v", err)
+	}
+	if len(months) == 0 {
+		t.Fatalf("expected at least one archive month directory")
+	}
+	days, err := listChildDirs(filepath.Join(archiveRoot, years[0], months[0]))
+	if err != nil {
+		t.Fatalf("listChildDirs(days) error = %v", err)
+	}
+	if len(days) == 0 {
+		t.Fatalf("expected at least one archive day directory")
+	}
+	return filepath.Join(years[0], months[0], days[0])
+}
+
+func listChildDirs(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]string, 0)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			items = append(items, entry.Name())
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(items)))
+	return items, nil
+}
+
+func TestLLMPingCommandUsesConfiguredProvider(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	runner := NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	buf, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	updated := bytes.Replace(buf, []byte("enabled: false"), []byte("enabled: true"), 1)
+	updated = bytes.Replace(updated, []byte("provider: openai"), []byte("provider: mock"), 1)
+	if err := os.WriteFile(configPath, updated, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"llm", "ping", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("llm ping Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("llm ping ok")) {
+		t.Fatalf("expected llm ping success output, got %s", got)
+	} else {
+		if !bytes.Contains([]byte(got), []byte("base_url=")) {
+			t.Fatalf("expected llm ping output to include base_url, got %s", got)
+		}
+		if !bytes.Contains([]byte(got), []byte("top_reason=")) {
+			t.Fatalf("expected llm ping output to include top_reason, got %s", got)
+		}
 	}
 }

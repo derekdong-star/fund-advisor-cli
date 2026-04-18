@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/config"
 	"github.com/derekdong-star/fund-advisor-cli/internal/docs"
+	"github.com/derekdong-star/fund-advisor-cli/internal/llm"
 	"github.com/derekdong-star/fund-advisor-cli/internal/model"
 	"github.com/derekdong-star/fund-advisor-cli/internal/report"
 	"github.com/derekdong-star/fund-advisor-cli/internal/service"
@@ -33,6 +35,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newBackfillCmd(&configPath))
 	root.AddCommand(newBacktestCmd(&configPath))
 	root.AddCommand(newDocsCmd(&configPath))
+	root.AddCommand(newLLMCmd(&configPath))
 	return root
 }
 
@@ -296,6 +299,50 @@ func newBacktestCmd(configPath *string) *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "table", "backtest format: table|markdown|json")
 	cmd.Flags().StringVar(&output, "output", "", "write rendered report to a file")
 	return cmd
+}
+
+func newLLMCmd(configPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "llm",
+		Short: "Run LLM connectivity and response checks",
+	}
+	cmd.AddCommand(newLLMPingCmd(configPath))
+	return cmd
+}
+
+func newLLMPingCmd(configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "ping",
+		Short: "Ping the configured OpenAI-compatible LLM provider",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(*configPath)
+			if err != nil {
+				return err
+			}
+			client := llm.NewClient(cfg.LLM)
+			req := llm.CandidateRerankRequest{
+				PortfolioName: cfg.Portfolio.Name,
+				RunDate:       time.Now().UTC(),
+				Candidates: []llm.CandidateRerankInput{
+					{FundCode: "PING_A", FundName: "Ping Candidate A", Category: "test", Role: "core", Benchmark: "benchmark_a", Score: 6, Return20D: 0.02, Return60D: 0.04, Return120D: 0.05, ReplaceFor: []string{"Weak Holding"}, RuleReason: "ping candidate A"},
+					{FundCode: "PING_B", FundName: "Ping Candidate B", Category: "test", Role: "core", Benchmark: "benchmark_b", Score: 7, Return20D: 0.03, Return60D: 0.06, Return120D: 0.08, ReplaceFor: []string{"Weak Holding"}, RuleReason: "ping candidate B"},
+				},
+			}
+			resp, err := client.Ping(cmd.Context(), req)
+			if err != nil {
+				return err
+			}
+			if err := llm.ValidateCandidateRerankResponseForCLI(req, resp); err != nil {
+				return err
+			}
+			topReason := ""
+			if len(resp.Rankings) > 0 {
+				topReason = resp.Rankings[0].Reason
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "llm ping ok: provider=%s base_url=%s model=%s rankings=%d top=%s top_reason=%q\n", cfg.LLM.Provider, cfg.LLM.BaseURL, cfg.LLM.Model, len(resp.Rankings), resp.Rankings[0].FundCode, topReason)
+			return err
+		},
+	}
 }
 
 func newDocsCmd(configPath *string) *cobra.Command {

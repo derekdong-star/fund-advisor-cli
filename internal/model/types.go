@@ -115,6 +115,7 @@ type CandidateSuggestion struct {
 	LatestTradeDate  time.Time `json:"latest_trade_date"`
 	ReplaceFor       []string  `json:"replace_for,omitempty"`
 	Reason           string    `json:"reason"`
+	EnhancedReason   string    `json:"enhanced_reason,omitempty"`
 }
 
 type TradeRecommendation struct {
@@ -124,6 +125,7 @@ type TradeRecommendation struct {
 	SuggestedWeight float64   `json:"suggested_weight"`
 	SuggestedAmount float64   `json:"suggested_amount"`
 	Reason          string    `json:"reason"`
+	EnhancedReason  string    `json:"enhanced_reason,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -185,16 +187,16 @@ type DCAPlanSummary struct {
 }
 
 type DCAPlanItem struct {
-	FundCode       string  `json:"fund_code"`
-	FundName       string  `json:"fund_name"`
-	Role           string  `json:"role"`
-	Action         Action  `json:"action"`
-	CurrentWeight  float64 `json:"current_weight"`
-	TargetWeight   float64 `json:"target_weight"`
-	GapWeight      float64 `json:"gap_weight"`
-	PlannedAmount  float64 `json:"planned_amount"`
-	Priority       int     `json:"priority"`
-	Reason         string  `json:"reason"`
+	FundCode      string  `json:"fund_code"`
+	FundName      string  `json:"fund_name"`
+	Role          string  `json:"role"`
+	Action        Action  `json:"action"`
+	CurrentWeight float64 `json:"current_weight"`
+	TargetWeight  float64 `json:"target_weight"`
+	GapWeight     float64 `json:"gap_weight"`
+	PlannedAmount float64 `json:"planned_amount"`
+	Priority      int     `json:"priority"`
+	Reason        string  `json:"reason"`
 }
 
 type DCASkippedFund struct {
@@ -205,8 +207,8 @@ type DCASkippedFund struct {
 }
 
 type DCAPlanReport struct {
-	Summary DCAPlanSummary  `json:"summary"`
-	Items   []DCAPlanItem   `json:"items,omitempty"`
+	Summary DCAPlanSummary   `json:"summary"`
+	Items   []DCAPlanItem    `json:"items,omitempty"`
 	Skipped []DCASkippedFund `json:"skipped,omitempty"`
 }
 

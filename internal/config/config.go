@@ -16,6 +16,7 @@ type Config struct {
 	DataSource DataSourceConfig `yaml:"data_source"`
 	Strategy   StrategyConfig   `yaml:"strategy"`
 	Publishing PublishingConfig `yaml:"publishing"`
+	LLM        LLMConfig        `yaml:"llm"`
 	Funds      []FundConfig     `yaml:"funds"`
 	Candidates []FundConfig     `yaml:"candidates"`
 
@@ -41,6 +42,18 @@ type DataSourceConfig struct {
 
 type PublishingConfig struct {
 	GitBook GitBookPublishConfig `yaml:"gitbook"`
+}
+
+type LLMConfig struct {
+	Enabled              bool   `yaml:"enabled"`
+	Provider             string `yaml:"provider"`
+	BaseURL              string `yaml:"base_url"`
+	Model                string `yaml:"model"`
+	APIKey               string `yaml:"api_key,omitempty"`
+	APIKeyEnv            string `yaml:"api_key_env,omitempty"`
+	TimeoutSeconds       int    `yaml:"timeout_seconds"`
+	Mode                 string `yaml:"mode"`
+	MaxCandidatesPerCall int    `yaml:"max_candidates_per_call"`
 }
 
 type GitBookPublishConfig struct {
@@ -200,6 +213,9 @@ func (c *Config) Validate() error {
 	if c.Publishing.GitBook.RetainDays < 0 {
 		return errors.New("publishing.gitbook.retain_days must be non-negative")
 	}
+	if c.LLM.TimeoutSeconds < 0 || c.LLM.MaxCandidatesPerCall < 0 {
+		return errors.New("llm settings must be non-negative")
+	}
 	if c.Publishing.GitBook.BacktestDays < 0 || c.Publishing.GitBook.BacktestRebalanceEvery < 0 {
 		return errors.New("publishing.gitbook backtest settings must be non-negative")
 	}
@@ -214,10 +230,48 @@ func (c *Config) Validate() error {
 			return errors.New("publishing.gitbook.project_directory is required when gitbook publishing is enabled")
 		}
 	}
+	if c.LLM.Enabled {
+		if strings.TrimSpace(c.LLM.Provider) == "" {
+			return errors.New("llm.provider is required when llm is enabled")
+		}
+		if strings.TrimSpace(c.LLM.BaseURL) == "" {
+			return errors.New("llm.base_url is required when llm is enabled")
+		}
+		if strings.TrimSpace(c.LLM.Model) == "" {
+			return errors.New("llm.model is required when llm is enabled")
+		}
+		if strings.TrimSpace(c.LLM.Mode) != "rerank_only" {
+			return fmt.Errorf("llm.mode must be rerank_only, got %s", c.LLM.Mode)
+		}
+		if c.LLM.TimeoutSeconds <= 0 {
+			return errors.New("llm.timeout_seconds must be positive when llm is enabled")
+		}
+	}
 	return nil
 }
 
 func (c *Config) applyDefaults() {
+	if strings.TrimSpace(c.LLM.Provider) == "" {
+		c.LLM.Provider = "openai"
+	}
+	if strings.TrimSpace(c.LLM.BaseURL) == "" {
+		c.LLM.BaseURL = "https://api.openai.com/v1"
+	}
+	if strings.TrimSpace(c.LLM.Model) == "" {
+		c.LLM.Model = "gpt-5-mini"
+	}
+	if strings.TrimSpace(c.LLM.APIKeyEnv) == "" {
+		c.LLM.APIKeyEnv = "FUND_ADVISOR_LLM_API_KEY"
+	}
+	if c.LLM.TimeoutSeconds == 0 {
+		c.LLM.TimeoutSeconds = 20
+	}
+	if strings.TrimSpace(c.LLM.Mode) == "" {
+		c.LLM.Mode = "rerank_only"
+	}
+	if c.LLM.MaxCandidatesPerCall == 0 {
+		c.LLM.MaxCandidatesPerCall = 8
+	}
 	if strings.TrimSpace(c.Strategy.Turnover.DCAFrequency) == "" {
 		c.Strategy.Turnover.DCAFrequency = "monthly"
 	}
@@ -334,6 +388,16 @@ func Default() *Config {
 				RiskDisclosurePath:          filepath.ToSlash(filepath.Join("about", "risk.md")),
 				Visibility:                  "public",
 			},
+		},
+		LLM: LLMConfig{
+			Enabled:              false,
+			Provider:             "openai",
+			BaseURL:              "https://api.openai.com/v1",
+			Model:                "gpt-5-mini",
+			APIKeyEnv:            "FUND_ADVISOR_LLM_API_KEY",
+			TimeoutSeconds:       20,
+			Mode:                 "rerank_only",
+			MaxCandidatesPerCall: 8,
 		},
 		Funds: []FundConfig{
 			{Code: "000979", Name: "景顺长城沪港深精选股票A", Category: "active_cn_equity", AccountValue: 68000, TargetWeight: 0.13, Benchmark: "hs300_hk_mix", Role: "satellite", Status: "active", Protected: true, DCAEnabled: true},

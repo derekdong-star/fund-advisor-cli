@@ -175,3 +175,36 @@ func TestRenderDCAPlanMarkdown(t *testing.T) {
 		t.Fatalf("expected skipped row, got %s", rendered)
 	}
 }
+
+func TestRenderMarkdownPrefersEnhancedReasons(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+	rendered := RenderMarkdown(model.AnalysisReport{
+		Summary: model.AnalysisSummary{PortfolioName: "test", RunDate: now, PortfolioValue: 100000},
+		Recommendations: []model.TradeRecommendation{{
+			Kind:            "SWAP",
+			SourceFund:      "Old Fund",
+			TargetFund:      "New Fund",
+			SuggestedWeight: 0.05,
+			SuggestedAmount: 5000,
+			Reason:          "rule replacement",
+			EnhancedReason:  "LLM prefers New Fund for stronger persistence.",
+			CreatedAt:       now,
+		}},
+		Candidates: []model.CandidateSuggestion{{
+			FundName:       "New Fund",
+			Score:          7,
+			Return20D:      0.03,
+			Return60D:      0.08,
+			ReplaceFor:     []string{"Old Fund"},
+			Reason:         "rule candidate",
+			EnhancedReason: "LLM keeps New Fund first because its medium-term trend is cleaner.",
+		}},
+	})
+	if !strings.Contains(rendered, "LLM prefers New Fund for stronger persistence. Rule basis: rule replacement") {
+		t.Fatalf("expected enhanced recommendation reason, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "LLM keeps New Fund first because its medium-term trend is cleaner. Rule basis: rule candidate") {
+		t.Fatalf("expected enhanced candidate reason, got %s", rendered)
+	}
+}

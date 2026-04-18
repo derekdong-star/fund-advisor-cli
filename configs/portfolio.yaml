@@ -40,6 +40,15 @@ strategy:
         max_dca_funds: 3
         pause_dca_on_risk: true
         prefer_dca: true
+llm:
+    enabled: false
+    provider: openai
+    base_url: https://open.palebluedot.ai/v1
+    model: anthropic/claude-sonnet-4.6
+    api_key_env: FUND_ADVISOR_LLM_API_KEY
+    timeout_seconds: 20
+    mode: rerank_only
+    max_candidates_per_call: 8
 publishing:
     gitbook:
         enabled: true

@@ -71,7 +71,7 @@ func RenderTable(report model.AnalysisReport) string {
 				displayOrDash(recommendation.TargetFund),
 				recommendation.SuggestedWeight*100,
 				recommendation.SuggestedAmount,
-				recommendation.Reason,
+				recommendationDisplayReason(recommendation),
 			)
 		}
 		_ = tw.Flush()
@@ -95,7 +95,7 @@ func RenderTable(report model.AnalysisReport) string {
 				displayOrDash(step.RelatedFund),
 				step.Amount,
 				displayOrDash(step.FundingSource),
-				step.Reason,
+				stepDisplayReason(step),
 			)
 		}
 		_ = tw.Flush()
@@ -128,7 +128,7 @@ func RenderTable(report model.AnalysisReport) string {
 				candidate.Return20D*100,
 				candidate.Return60D*100,
 				stringsJoin(candidate.ReplaceFor),
-				candidate.Reason,
+				candidateDisplayReason(candidate),
 			)
 		}
 		_ = tw.Flush()
@@ -165,7 +165,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 				recommendation.TargetFund,
 				recommendation.SuggestedAmount,
 				recommendation.SuggestedWeight*100,
-				recommendation.Reason,
+				recommendationDisplayReason(recommendation),
 			)
 		}
 		if report.DCAPlan != nil && report.DCAPlan.Summary.ReserveAmount > 0 {
@@ -183,7 +183,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 				recommendation.SourceFund,
 				recommendation.SuggestedAmount,
 				recommendation.SuggestedWeight*100,
-				recommendation.Reason,
+				recommendationDisplayReason(recommendation),
 			)
 		}
 	}
@@ -199,7 +199,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 				recommendation.TargetFund,
 				recommendation.SuggestedAmount,
 				recommendation.SuggestedWeight*100,
-				recommendation.Reason,
+				recommendationDisplayReason(recommendation),
 			)
 		}
 	}
@@ -256,7 +256,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 				displayOrDash(step.RelatedFund),
 				step.Amount,
 				displayOrDash(step.FundingSource),
-				step.Reason,
+				stepDisplayReason(step),
 			)
 		}
 	}
@@ -271,7 +271,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 				candidate.Return20D*100,
 				candidate.Return60D*100,
 				stringsJoin(candidate.ReplaceFor),
-				candidate.Reason,
+				candidateDisplayReason(candidate),
 			)
 		}
 	}
@@ -362,7 +362,7 @@ func buildDisplayExecutionPlan(recommendations []model.TradeRecommendation) *mod
 					RelatedFund: recommendation.TargetFund,
 					Amount:      recommendation.SuggestedAmount,
 					Weight:      recommendation.SuggestedWeight,
-					Reason:      recommendation.Reason,
+					Reason:      recommendationDisplayReason(recommendation),
 				},
 				model.ExecutionStep{
 					Order:         order + 1,
@@ -372,7 +372,7 @@ func buildDisplayExecutionPlan(recommendations []model.TradeRecommendation) *mod
 					Amount:        recommendation.SuggestedAmount,
 					Weight:        recommendation.SuggestedWeight,
 					FundingSource: fmt.Sprintf("卖出 %s", recommendation.SourceFund),
-					Reason:        recommendation.Reason,
+					Reason:        recommendationDisplayReason(recommendation),
 				},
 			)
 			order += 2
@@ -398,7 +398,7 @@ func buildDisplayExecutionPlan(recommendations []model.TradeRecommendation) *mod
 				Amount:        recommendation.SuggestedAmount,
 				Weight:        recommendation.SuggestedWeight,
 				FundingSource: "组合卖出回笼资金",
-				Reason:        recommendation.Reason,
+				Reason:        recommendationDisplayReason(recommendation),
 			})
 			order++
 		}
@@ -406,6 +406,31 @@ func buildDisplayExecutionPlan(recommendations []model.TradeRecommendation) *mod
 	plan.NetCashChange = plan.GrossSellAmount - plan.GrossBuyAmount
 	plan.Steps = steps
 	return plan
+}
+
+func candidateDisplayReason(candidate model.CandidateSuggestion) string {
+	return displayReason(candidate.Reason, candidate.EnhancedReason)
+}
+
+func recommendationDisplayReason(recommendation model.TradeRecommendation) string {
+	return displayReason(recommendation.Reason, recommendation.EnhancedReason)
+}
+
+func stepDisplayReason(step model.ExecutionStep) string {
+	return step.Reason
+}
+
+func displayReason(ruleReason, enhancedReason string) string {
+	ruleReason = strings.TrimSpace(ruleReason)
+	enhancedReason = strings.TrimSpace(enhancedReason)
+	switch {
+	case enhancedReason == "":
+		return ruleReason
+	case ruleReason == "":
+		return enhancedReason
+	default:
+		return fmt.Sprintf("%s Rule basis: %s", enhancedReason, ruleReason)
+	}
 }
 
 func filterRecommendations(recommendations []model.TradeRecommendation, kind string) []model.TradeRecommendation {

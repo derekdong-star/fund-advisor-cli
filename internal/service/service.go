@@ -10,6 +10,7 @@ import (
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/config"
 	"github.com/derekdong-star/fund-advisor-cli/internal/fetcher"
+	"github.com/derekdong-star/fund-advisor-cli/internal/llm"
 	"github.com/derekdong-star/fund-advisor-cli/internal/model"
 	"github.com/derekdong-star/fund-advisor-cli/internal/report"
 	"github.com/derekdong-star/fund-advisor-cli/internal/store"
@@ -17,10 +18,11 @@ import (
 )
 
 type Service struct {
-	config  *config.Config
-	store   *store.Store
-	fetcher *fetcher.EastmoneyFetcher
-	engine  *strategy.Engine
+	config   *config.Config
+	store    *store.Store
+	fetcher  *fetcher.EastmoneyFetcher
+	engine   *strategy.Engine
+	enhancer *llm.Enhancer
 }
 
 func New(configPath string) (*Service, error) {
@@ -37,10 +39,11 @@ func New(configPath string) (*Service, error) {
 		timeout = 15 * time.Second
 	}
 	return &Service{
-		config:  cfg,
-		store:   st,
-		fetcher: fetcher.NewEastmoneyFetcher(timeout),
-		engine:  strategy.NewEngine(cfg.Strategy),
+		config:   cfg,
+		store:    st,
+		fetcher:  fetcher.NewEastmoneyFetcher(timeout),
+		engine:   strategy.NewEngine(cfg.Strategy),
+		enhancer: llm.NewEnhancer(cfg.LLM),
 	}, nil
 }
 
@@ -183,6 +186,11 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 	reportData := s.engine.Analyze(s.config.Portfolio.Name, states, candidates)
 	dcaPlan := s.engine.BuildDCAPlan(reportData.Summary.RunDate, s.config.Portfolio.Name, reportData.Position, reportData.Summary.PortfolioValue)
 	reportData.DCAPlan = &dcaPlan
+	if s.enhancer != nil {
+		if err := s.enhancer.EnhanceAnalysis(context.Background(), &reportData); err != nil {
+			reportData.Summary.Notes = append(reportData.Summary.Notes, fmt.Sprintf("LLM enhancement skipped: %v", err))
+		}
+	}
 	if save {
 		runID, err := s.store.SaveAnalysis(reportData)
 		if err != nil {

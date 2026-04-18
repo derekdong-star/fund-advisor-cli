@@ -32,6 +32,21 @@ func TestWriteExampleIncludesGitBookWorkflowDefaults(t *testing.T) {
 	if got := cfg.Publishing.GitBook.SpaceID; got != "" {
 		t.Fatalf("SpaceID = %q, want empty", got)
 	}
+	if cfg.LLM.Enabled {
+		t.Fatalf("LLM should default to disabled")
+	}
+	if got := cfg.LLM.Provider; got != "openai" {
+		t.Fatalf("LLM provider = %s, want openai", got)
+	}
+	if got := cfg.LLM.BaseURL; got != "https://api.openai.com/v1" {
+		t.Fatalf("LLM base URL = %s, want https://api.openai.com/v1", got)
+	}
+	if got := cfg.LLM.APIKeyEnv; got != "FUND_ADVISOR_LLM_API_KEY" {
+		t.Fatalf("LLM api key env = %s, want FUND_ADVISOR_LLM_API_KEY", got)
+	}
+	if got := cfg.LLM.Mode; got != "rerank_only" {
+		t.Fatalf("LLM mode = %s, want rerank_only", got)
+	}
 }
 
 func TestLoadAndValidateDefaultConfig(t *testing.T) {
@@ -89,5 +104,14 @@ func TestLoadAndValidateDefaultConfig(t *testing.T) {
 	}
 	if got := cfg.Publishing.GitBook.BacktestRebalanceEvery; got != 20 {
 		t.Fatalf("BacktestRebalanceEvery = %d, want 20", got)
+	}
+	if got := cfg.LLM.Model; got != "gpt-5-mini" {
+		t.Fatalf("LLM model = %s, want gpt-5-mini", got)
+	}
+	if got := cfg.LLM.TimeoutSeconds; got != 20 {
+		t.Fatalf("LLM timeout = %d, want 20", got)
+	}
+	if got := cfg.LLM.MaxCandidatesPerCall; got != 8 {
+		t.Fatalf("LLM max candidates = %d, want 8", got)
 	}
 }
