@@ -1,4 +1,4 @@
-# 2026-04-18 Snapshot
+# 2026-04-19 Snapshot
 
 - [Back to 2026-04](../README.md)
 
@@ -7,3 +7,4 @@
 - [Backtest](backtest.md)
 - [Daily](daily.md)
 - [Dca Plan](dca-plan.md)
+- [Market Pool](market-pool.md)
