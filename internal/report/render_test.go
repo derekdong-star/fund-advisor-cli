@@ -208,3 +208,40 @@ func TestRenderMarkdownPrefersEnhancedReasons(t *testing.T) {
 		t.Fatalf("expected enhanced candidate reason, got %s", rendered)
 	}
 }
+
+func TestRenderMarketPoolMarkdown(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 4, 19, 10, 0, 0, 0, time.UTC)
+	rendered, err := RenderMarketPool(model.MarketPoolReport{
+		Summary: model.MarketPoolSummary{
+			RunDate:       now,
+			UniverseCount: 19000,
+			MatchedCount:  120,
+			EligibleCount: 8,
+			SelectedCount: 2,
+			RetainedCount: 1,
+			Notes:         []string{"old candidate retained due to score gap"},
+		},
+		Items: []model.MarketPoolItem{{
+			Rank:            1,
+			ThemeLabel:      "A股宽基",
+			FundName:        "易方达中证A500ETF联接A",
+			Score:           8,
+			Return120D:      0.12,
+			Return250D:      0.21,
+			MaxDrawdown120D: 0.09,
+			FundSizeYi:      32,
+			Retained:        true,
+			Reason:          "250日收益 21.00%；指数工具更稳定",
+		}},
+	}, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMarketPool() error = %v", err)
+	}
+	if !strings.Contains(rendered, "# Stable Market Pool") {
+		t.Fatalf("expected market pool heading, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| 1 | A股宽基 | 易方达中证A500ETF联接A | 8 | 12.00% | 21.00% | 9.00% | 32.0亿 | yes | 250日收益 21.00%；指数工具更稳定 |") {
+		t.Fatalf("expected market pool row, got %s", rendered)
+	}
+}

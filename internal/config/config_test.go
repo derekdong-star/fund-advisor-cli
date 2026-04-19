@@ -47,6 +47,15 @@ func TestWriteExampleIncludesGitBookWorkflowDefaults(t *testing.T) {
 	if got := cfg.LLM.Mode; got != "rerank_only" {
 		t.Fatalf("LLM mode = %s, want rerank_only", got)
 	}
+	if !cfg.MarketPool.Enabled {
+		t.Fatalf("market pool should default to enabled")
+	}
+	if got := cfg.MarketPool.SelectionCount; got != 6 {
+		t.Fatalf("market pool selection count = %d, want 6", got)
+	}
+	if got := cfg.MarketPool.MaxFundsPerTheme; got != 12 {
+		t.Fatalf("market pool max funds per theme = %d, want 12", got)
+	}
 }
 
 func TestLoadAndValidateDefaultConfig(t *testing.T) {
@@ -113,5 +122,14 @@ func TestLoadAndValidateDefaultConfig(t *testing.T) {
 	}
 	if got := cfg.LLM.MaxCandidatesPerCall; got != 8 {
 		t.Fatalf("LLM max candidates = %d, want 8", got)
+	}
+	if got := cfg.MarketPool.SelectionCount; got != 6 {
+		t.Fatalf("market pool selection count = %d, want 6", got)
+	}
+	if got := cfg.MarketPool.MaxFundsPerTheme; got != 12 {
+		t.Fatalf("market pool max funds per theme = %d, want 12", got)
+	}
+	if got := cfg.MarketPool.MinReturn120D; got != 0.08 {
+		t.Fatalf("market pool min 120d return = %.2f, want 0.08", got)
 	}
 }

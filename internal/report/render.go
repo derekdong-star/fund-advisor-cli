@@ -45,6 +45,23 @@ func RenderDCAPlan(plan model.DCAPlanReport, format string) (string, error) {
 	}
 }
 
+func RenderMarketPool(pool model.MarketPoolReport, format string) (string, error) {
+	switch format {
+	case "table":
+		return renderMarketPoolTable(pool), nil
+	case "markdown", "md":
+		return renderMarketPoolMarkdown(pool), nil
+	case "json":
+		buf, err := json.MarshalIndent(pool, "", "  ")
+		if err != nil {
+			return "", err
+		}
+		return string(buf), nil
+	default:
+		return "", fmt.Errorf("unsupported market pool format: %s", format)
+	}
+}
+
 func RenderTable(report model.AnalysisReport) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "Portfolio: %s\n", report.Summary.PortfolioName)
@@ -703,4 +720,89 @@ func renderBacktestMarkdown(report model.BacktestReport) string {
 	}
 
 	return buf.String()
+}
+
+func renderMarketPoolTable(pool model.MarketPoolReport) string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Market Pool Run Date: %s\n", pool.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "Universe Count: %d\n", pool.Summary.UniverseCount)
+	fmt.Fprintf(&buf, "Matched Count: %d\n", pool.Summary.MatchedCount)
+	fmt.Fprintf(&buf, "Eligible Count: %d\n", pool.Summary.EligibleCount)
+	fmt.Fprintf(&buf, "Selected Count: %d\n", pool.Summary.SelectedCount)
+	fmt.Fprintf(&buf, "Retained Count: %d\n", pool.Summary.RetainedCount)
+	if len(pool.Summary.Notes) > 0 {
+		buf.WriteString("\nNotes:\n")
+		for _, note := range pool.Summary.Notes {
+			fmt.Fprintf(&buf, "- %s\n", note)
+		}
+	}
+	if len(pool.Items) == 0 {
+		buf.WriteString("\nNo market pool candidates selected.\n")
+		return buf.String()
+	}
+	buf.WriteString("\nCandidates:\n")
+	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "RANK	THEME	FUND	SCORE	120D	250D	MDD120	SIZE	RET	REASON")
+	for _, item := range pool.Items {
+		fmt.Fprintf(tw, "%d	%s	%s	%d	%.2f%%	%.2f%%	%.2f%%	%.1f亿	%s	%s\n",
+			item.Rank,
+			item.ThemeLabel,
+			item.FundName,
+			item.Score,
+			item.Return120D*100,
+			item.Return250D*100,
+			item.MaxDrawdown120D*100,
+			item.FundSizeYi,
+			yesNo(item.Retained),
+			item.Reason,
+		)
+	}
+	_ = tw.Flush()
+	return buf.String()
+}
+
+func renderMarketPoolMarkdown(pool model.MarketPoolReport) string {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "# Stable Market Pool\n\n")
+	fmt.Fprintf(&buf, "- Run Date: `%s`\n", pool.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- Universe Count: `%d`\n", pool.Summary.UniverseCount)
+	fmt.Fprintf(&buf, "- Matched Count: `%d`\n", pool.Summary.MatchedCount)
+	fmt.Fprintf(&buf, "- Eligible Count: `%d`\n", pool.Summary.EligibleCount)
+	fmt.Fprintf(&buf, "- Selected Count: `%d`\n", pool.Summary.SelectedCount)
+	fmt.Fprintf(&buf, "- Retained Count: `%d`\n", pool.Summary.RetainedCount)
+	if len(pool.Summary.Notes) > 0 {
+		buf.WriteString("\n## Notes\n\n")
+		for _, note := range pool.Summary.Notes {
+			fmt.Fprintf(&buf, "- %s\n", note)
+		}
+	}
+	if len(pool.Items) == 0 {
+		buf.WriteString("\n## Candidates\n\n- No stable market pool candidates selected.\n")
+		return buf.String()
+	}
+	buf.WriteString("\n## Candidates\n\n")
+	buf.WriteString("| Rank | Theme | Fund | Score | 120D | 250D | Max Drawdown 120D | Size | Retained | Reason |\n")
+	buf.WriteString("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
+	for _, item := range pool.Items {
+		fmt.Fprintf(&buf, "| %d | %s | %s | %d | %.2f%% | %.2f%% | %.2f%% | %.1f亿 | %s | %s |\n",
+			item.Rank,
+			item.ThemeLabel,
+			item.FundName,
+			item.Score,
+			item.Return120D*100,
+			item.Return250D*100,
+			item.MaxDrawdown120D*100,
+			item.FundSizeYi,
+			yesNo(item.Retained),
+			item.Reason,
+		)
+	}
+	return buf.String()
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }

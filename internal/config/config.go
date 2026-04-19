@@ -15,6 +15,7 @@ type Config struct {
 	Storage    StorageConfig    `yaml:"storage"`
 	DataSource DataSourceConfig `yaml:"data_source"`
 	Strategy   StrategyConfig   `yaml:"strategy"`
+	MarketPool MarketPoolConfig `yaml:"market_pool"`
 	Publishing PublishingConfig `yaml:"publishing"`
 	LLM        LLMConfig        `yaml:"llm"`
 	Funds      []FundConfig     `yaml:"funds"`
@@ -132,6 +133,19 @@ type TurnoverConfig struct {
 	PreferDCA                bool    `yaml:"prefer_dca"`
 }
 
+type MarketPoolConfig struct {
+	Enabled             bool    `yaml:"enabled"`
+	SelectionCount      int     `yaml:"selection_count"`
+	MaxFundsPerTheme    int     `yaml:"max_funds_per_theme"`
+	MinFundSizeYi       float64 `yaml:"min_fund_size_yi"`
+	MinEstablishedYears float64 `yaml:"min_established_years"`
+	MinReturn120D       float64 `yaml:"min_return_120d"`
+	MinReturn250D       float64 `yaml:"min_return_250d"`
+	MaxDrawdown120D     float64 `yaml:"max_drawdown_120d"`
+	MinScore            int     `yaml:"min_score"`
+	RetentionScoreGap   int     `yaml:"retention_score_gap"`
+}
+
 type FundConfig struct {
 	Code             string   `yaml:"code"`
 	Name             string   `yaml:"name"`
@@ -210,6 +224,9 @@ func (c *Config) Validate() error {
 	if c.Strategy.Turnover.MinSwapScore < 0 || c.Strategy.Turnover.MaxProtectedReduceWeight < 0 || c.Strategy.Turnover.MonthlyDCAAmount < 0 || c.Strategy.Turnover.MinDCAFundAmount < 0 || c.Strategy.Turnover.MaxDCAFunds < 0 {
 		return errors.New("turnover thresholds must be non-negative")
 	}
+	if c.MarketPool.SelectionCount < 0 || c.MarketPool.MaxFundsPerTheme < 0 || c.MarketPool.MinFundSizeYi < 0 || c.MarketPool.MinEstablishedYears < 0 || c.MarketPool.MaxDrawdown120D < 0 || c.MarketPool.MinScore < 0 || c.MarketPool.RetentionScoreGap < 0 {
+		return errors.New("market_pool thresholds must be non-negative")
+	}
 	if c.Publishing.GitBook.RetainDays < 0 {
 		return errors.New("publishing.gitbook.retain_days must be non-negative")
 	}
@@ -283,6 +300,30 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Strategy.Turnover.PauseDCAOnRisk == nil {
 		c.Strategy.Turnover.PauseDCAOnRisk = boolPtr(true)
+	}
+	if c.MarketPool.SelectionCount == 0 {
+		c.MarketPool.SelectionCount = 6
+	}
+	if c.MarketPool.MaxFundsPerTheme == 0 {
+		c.MarketPool.MaxFundsPerTheme = 12
+	}
+	if c.MarketPool.MinEstablishedYears == 0 {
+		c.MarketPool.MinEstablishedYears = 1
+	}
+	if c.MarketPool.MinReturn120D == 0 {
+		c.MarketPool.MinReturn120D = 0.08
+	}
+	if c.MarketPool.MinReturn250D == 0 {
+		c.MarketPool.MinReturn250D = 0.12
+	}
+	if c.MarketPool.MaxDrawdown120D == 0 {
+		c.MarketPool.MaxDrawdown120D = 0.18
+	}
+	if c.MarketPool.MinScore == 0 {
+		c.MarketPool.MinScore = 6
+	}
+	if c.MarketPool.RetentionScoreGap == 0 {
+		c.MarketPool.RetentionScoreGap = 2
 	}
 	if strings.TrimSpace(c.Publishing.GitBook.Mode) == "" {
 		c.Publishing.GitBook.Mode = "git-sync"
@@ -365,6 +406,7 @@ func Default() *Config {
 			CandidatePool: CandidatePoolConfig{MinFundSizeYi: 8, MinEstablishedYears: 1, MaxExpenseRatio: 0.008, CoreRequireIndex: true, PreferBenchmarkMatch: true},
 			Turnover:      TurnoverConfig{Mode: "low_turnover", MinSwapScore: 7, MaxProtectedReduceWeight: 0.22, MonthlyDCAAmount: 5000, MinDCAFundAmount: 1000, DCAFrequency: "monthly", MaxDCAFunds: 3, PauseDCAOnRisk: boolPtr(true), PreferDCA: true},
 		},
+		MarketPool: MarketPoolConfig{Enabled: true, SelectionCount: 6, MaxFundsPerTheme: 12, MinFundSizeYi: 0, MinEstablishedYears: 1, MinReturn120D: 0.08, MinReturn250D: 0.12, MaxDrawdown120D: 0.18, MinScore: 6, RetentionScoreGap: 2},
 		Publishing: PublishingConfig{
 			GitBook: GitBookPublishConfig{
 				Enabled:                     true,

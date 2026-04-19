@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 	created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS market_pool_runs (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_date TEXT NOT NULL,
+	summary_json TEXT NOT NULL,
+	report_json TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fund_signals (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	analysis_run_id INTEGER NOT NULL,
@@ -113,7 +121,10 @@ func (s *Store) Init() error {
 	if err := s.ensurePortfolioPositionColumn("dca_enabled", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
-	return s.ensureAnalysisRunColumn("report_json", "TEXT NOT NULL DEFAULT ''")
+	if err := s.ensureAnalysisRunColumn("report_json", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	return s.ensureMarketPoolRunColumn("report_json", "TEXT NOT NULL DEFAULT ''")
 }
 
 func (s *Store) configurePragmas() error {
@@ -182,6 +193,33 @@ func (s *Store) ensureAnalysisRunColumn(name, definition string) error {
 		return err
 	}
 	_, err = s.db.Exec(fmt.Sprintf("ALTER TABLE analysis_runs ADD COLUMN %s %s", name, definition))
+	return err
+}
+
+func (s *Store) ensureMarketPoolRunColumn(name, definition string) error {
+	rows, err := s.db.Query(`PRAGMA table_info(market_pool_runs)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var columnName string
+		var columnType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if columnName == name {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(fmt.Sprintf("ALTER TABLE market_pool_runs ADD COLUMN %s %s", name, definition))
 	return err
 }
 
@@ -442,6 +480,53 @@ func (s *Store) LatestAnalysis() (*model.AnalysisReport, error) {
 		}
 	}
 	return s.loadLegacyAnalysis(runID, summaryJSON)
+}
+
+func (s *Store) SaveMarketPool(report model.MarketPoolReport) (int64, error) {
+	summaryJSON, err := json.Marshal(report.Summary)
+	if err != nil {
+		return 0, err
+	}
+	reportCopy := report
+	reportCopy.RunID = 0
+	reportJSON, err := json.Marshal(reportCopy)
+	if err != nil {
+		return 0, err
+	}
+	result, err := s.db.Exec(`
+INSERT INTO market_pool_runs (run_date, summary_json, report_json, created_at)
+VALUES (?, ?, ?, ?)
+`, report.Summary.RunDate.Format(time.RFC3339), string(summaryJSON), string(reportJSON), time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) LatestMarketPool() (*model.MarketPoolReport, error) {
+	row := s.db.QueryRow(`SELECT id, summary_json, report_json FROM market_pool_runs ORDER BY id DESC LIMIT 1`)
+	var runID int64
+	var summaryJSON string
+	var reportJSON string
+	if err := row.Scan(&runID, &summaryJSON, &reportJSON); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(reportJSON) == "" {
+		var summary model.MarketPoolSummary
+		if err := json.Unmarshal([]byte(summaryJSON), &summary); err != nil {
+			return nil, err
+		}
+		return &model.MarketPoolReport{RunID: runID, Summary: summary}, nil
+	}
+	var report model.MarketPoolReport
+	if err := json.Unmarshal([]byte(reportJSON), &report); err != nil {
+		return nil, err
+	}
+	report.RunID = runID
+	if report.Summary.RunDate.IsZero() && strings.TrimSpace(summaryJSON) != "" {
+		_ = json.Unmarshal([]byte(summaryJSON), &report.Summary)
+	}
+	return &report, nil
 }
 
 func (s *Store) loadLegacyAnalysis(runID int64, summaryJSON string) (*model.AnalysisReport, error) {

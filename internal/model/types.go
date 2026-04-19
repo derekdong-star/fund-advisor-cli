@@ -259,8 +259,61 @@ type BacktestReport struct {
 	Trades  []BacktestTrade `json:"trades,omitempty"`
 }
 
+type MarketPoolSummary struct {
+	RunDate       time.Time `json:"run_date"`
+	UniverseCount int       `json:"universe_count"`
+	MatchedCount  int       `json:"matched_count"`
+	EligibleCount int       `json:"eligible_count"`
+	SelectedCount int       `json:"selected_count"`
+	RetainedCount int       `json:"retained_count"`
+	GeneratedAt   time.Time `json:"generated_at"`
+	Notes         []string  `json:"notes,omitempty"`
+}
+
+type MarketPoolItem struct {
+	Rank             int       `json:"rank"`
+	ThemeKey         string    `json:"theme_key"`
+	ThemeLabel       string    `json:"theme_label"`
+	FundCode         string    `json:"fund_code"`
+	FundName         string    `json:"fund_name"`
+	FundType         string    `json:"fund_type"`
+	Score            int       `json:"score"`
+	Retained         bool      `json:"retained"`
+	Return20D        float64   `json:"return_20d"`
+	Return60D        float64   `json:"return_60d"`
+	Return120D       float64   `json:"return_120d"`
+	Return250D       float64   `json:"return_250d"`
+	MaxDrawdown120D  float64   `json:"max_drawdown_120d"`
+	FundSizeYi       float64   `json:"fund_size_yi"`
+	EstablishedYears float64   `json:"established_years"`
+	LatestTradeDate  time.Time `json:"latest_trade_date"`
+	Reason           string    `json:"reason"`
+}
+
+type MarketPoolReport struct {
+	RunID   int64             `json:"run_id"`
+	Summary MarketPoolSummary `json:"summary"`
+	Items   []MarketPoolItem  `json:"items,omitempty"`
+}
+
 type FetchResult struct {
 	Code      string         `json:"code"`
 	Name      string         `json:"name"`
 	Snapshots []FundSnapshot `json:"snapshots"`
+}
+
+type MarketSearchFund struct {
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	FundType string `json:"fund_type"`
+	Spell    string `json:"spell"`
+}
+
+type MarketFundProfile struct {
+	Fund             MarketSearchFund `json:"fund"`
+	Latest           *FundSnapshot    `json:"latest,omitempty"`
+	History          []FundSnapshot   `json:"history,omitempty"`
+	FundSizeYi       float64          `json:"fund_size_yi"`
+	EstablishedYears float64          `json:"established_years"`
+	IsIndex          bool             `json:"is_index"`
 }
