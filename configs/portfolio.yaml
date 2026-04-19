@@ -40,6 +40,17 @@ strategy:
         max_dca_funds: 3
         pause_dca_on_risk: true
         prefer_dca: true
+market_pool:
+    enabled: true
+    selection_count: 6
+    max_funds_per_theme: 12
+    min_fund_size_yi: 0
+    min_established_years: 1
+    min_return_120d: 0.08
+    min_return_250d: 0.12
+    max_drawdown_120d: 0.18
+    min_score: 6
+    retention_score_gap: 2
 llm:
     enabled: false
     provider: openai

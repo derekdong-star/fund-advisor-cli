@@ -31,6 +31,12 @@ func validateTree(cfg *config.Config, root string) error {
 	if cfg.Publishing.GitBook.IncludeDCAPlan {
 		required = append(required, latestReportPath(root, "dca-plan"))
 	}
+	if _, err := os.Stat(latestReportPath(root, "market-pool")); err == nil {
+		required = append(required, latestReportPath(root, "market-pool"))
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
 	for _, path := range required {
 		if _, err := os.Stat(path); err != nil {
 			return fmt.Errorf("missing required docs artifact %s: %w", path, err)

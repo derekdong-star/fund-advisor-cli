@@ -63,6 +63,25 @@ func exportReports(cfg *config.Config, input PublishInput) (*ExportResult, error
 			result.Archive["dca-plan"] = ReportArtifact{Label: "Archived DCA Plan", Path: relativeDocPath(root, archiveAbs)}
 		}
 	}
+	if input.MarketPool != nil {
+		rendered, err := report.RenderMarketPool(*input.MarketPool, "markdown")
+		if err != nil {
+			return nil, err
+		}
+		latestRel := filepath.Join(latestDirName, "market-pool.md")
+		latestAbs := latestReportPath(root, "market-pool")
+		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
+			return nil, err
+		}
+		result.Latest["market-pool"] = ReportArtifact{Label: "Stable Market Pool", Path: latestRel}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "market-pool")
+			if err := writeDoc(archiveAbs, rendered); err != nil {
+				return nil, err
+			}
+			result.Archive["market-pool"] = ReportArtifact{Label: "Archived Stable Market Pool", Path: relativeDocPath(root, archiveAbs)}
+		}
+	}
 	if cfg.Publishing.GitBook.IncludeBacktest {
 		backtestUnavailable := input.Backtest == nil && input.BacktestError != ""
 		if cfg.Publishing.GitBook.HideBacktestWhenUnavailable && backtestUnavailable {

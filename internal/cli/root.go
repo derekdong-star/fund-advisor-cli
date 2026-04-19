@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +18,18 @@ import (
 	"github.com/derekdong-star/fund-advisor-cli/internal/report"
 	"github.com/derekdong-star/fund-advisor-cli/internal/service"
 )
+
+var fetchForDocsPublish = func(ctx context.Context, svc *service.Service, days int) error {
+	return svc.Fetch(ctx, days)
+}
+
+var analyzeForDocsPublish = func(svc *service.Service) (*model.AnalysisReport, error) {
+	return svc.Analyze()
+}
+
+var buildMarketPoolForDocsPublish = func(ctx context.Context, svc *service.Service, days int) (*model.MarketPoolReport, error) {
+	return svc.BuildMarketPool(ctx, days)
+}
 
 func NewRootCmd() *cobra.Command {
 	var configPath string
@@ -32,6 +46,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newReportCmd(&configPath))
 	root.AddCommand(newDCAPlanCmd(&configPath))
 	root.AddCommand(newRunCmd(&configPath))
+	root.AddCommand(newMarketPoolCmd(&configPath))
 	root.AddCommand(newBackfillCmd(&configPath))
 	root.AddCommand(newBacktestCmd(&configPath))
 	root.AddCommand(newDocsCmd(&configPath))
@@ -218,6 +233,42 @@ func newDCAPlanCmd(configPath *string) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&format, "format", "table", "dca plan format: table|markdown|json")
 	cmd.Flags().StringVar(&output, "output", "", "write rendered dca plan to a file")
+	return cmd
+}
+
+func newMarketPoolCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	cmd := &cobra.Command{
+		Use:   "market-pool",
+		Short: "Build a stable market-wide candidate pool",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			pool, err := svc.BuildMarketPool(cmd.Context(), days)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMarketPool(*pool, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "market pool format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered market pool to a file")
+	cmd.Flags().IntVar(&days, "days", 300, "number of recent trading days to evaluate")
 	return cmd
 }
 
@@ -475,18 +526,35 @@ func buildDocsPublishInput(svc *service.Service) (docs.PublishInput, error) {
 }
 
 func buildDocsPublishInputAfterRefresh(ctx context.Context, svc *service.Service, days int) (docs.PublishInput, error) {
-	if err := svc.Fetch(ctx, days); err != nil {
+	if err := fetchForDocsPublish(ctx, svc, days); err != nil {
 		return docs.PublishInput{}, err
 	}
-	analysis, err := svc.Analyze()
+	analysis, err := analyzeForDocsPublish(svc)
 	if err != nil {
 		return docs.PublishInput{}, err
 	}
-	return buildDocsPublishInputWithAnalysis(svc, analysis, analysis.DCAPlan), nil
+	input := buildDocsPublishInputWithAnalysis(svc, analysis, analysis.DCAPlan)
+	marketPool, err := buildMarketPoolForDocsPublish(ctx, svc, days)
+	if err == nil {
+		input.MarketPool = marketPool
+		input.MarketPoolError = ""
+	} else {
+		input.MarketPool = nil
+		input.MarketPoolError = err.Error()
+	}
+	return input, nil
 }
 
 func buildDocsPublishInputWithAnalysis(svc *service.Service, analysis *model.AnalysisReport, plan *model.DCAPlanReport) docs.PublishInput {
 	input := docs.PublishInput{Analysis: analysis, Plan: plan}
+	marketPool, err := svc.LatestMarketPool()
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			input.MarketPoolError = err.Error()
+		}
+	} else {
+		input.MarketPool = marketPool
+	}
 	if svc.Config().Publishing.GitBook.IncludeBacktest {
 		backtest, err := svc.Backtest(
 			svc.Config().Publishing.GitBook.BacktestDays,

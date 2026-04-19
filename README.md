@@ -24,6 +24,7 @@ go run ./cmd/fundcli analyze --config ./configs/portfolio.yaml
 go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format table
 go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format markdown --output ./reports/latest.md
 go run ./cmd/fundcli dca-plan --config ./configs/portfolio.yaml --format markdown --output ./reports/dca-plan.md
+go run ./cmd/fundcli market-pool --config ./configs/portfolio.yaml --format markdown --output ./reports/market-pool.md
 go run ./cmd/fundcli run --config ./configs/portfolio.yaml --format markdown --output ./reports/daily.md
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180
@@ -43,6 +44,7 @@ Key fields:
 - `candidates`: optional watchlist used for replacement suggestions
 - candidate metadata: supports `expense_ratio`, `fund_size_yi`, `established_years`, `is_index`, `tags`
 - turnover DCA settings: `monthly_dca_amount`, `min_dca_fund_amount`, `dca_frequency`, `max_dca_funds`, `pause_dca_on_risk`
+- stable market pool settings: `market_pool.selection_count`, `max_funds_per_theme`, `min_return_120d`, `min_return_250d`, `max_drawdown_120d`, `retention_score_gap`
 - GitBook publishing: `publishing.gitbook.docs_root`, `project_directory`, `generate_homepage`, `generate_summary`, `include_backtest`, `hide_backtest_when_unavailable`, `backtest_days`, `backtest_rebalance_every`, `retain_days`
 - GitBook sync IDs: `publishing.gitbook.organization_id`, `site_id`, `space_id`
 
@@ -64,6 +66,8 @@ When multiple weak holdings compete for the same candidate, the recommendation e
 
 `dca-plan` renders a current contribution plan from live portfolio state. It only considers `dca_enabled` funds, can cap the number of active DCA targets, skips allocations below `min_dca_fund_amount`, and by default pauses monthly contributions for funds currently marked `PAUSE_BUY`, `REDUCE`, or `REPLACE_WATCH`.
 
+`market-pool` builds a separate stable buy-candidate pool from the broader market. It scans fixed themes, applies medium-term return and drawdown thresholds, and uses a retention rule so the previous winner for a theme stays in place when the score gap is small enough. The goal is to keep 5-10 solid candidates instead of rotating the list every day.
+
 ## Notes
 
 - SQLite now uses `WAL` mode plus a `busy_timeout`, which reduces transient `database is locked` errors during repeated CLI runs.
@@ -78,7 +82,7 @@ When multiple weak holdings compete for the same candidate, the recommendation e
 
 ## GitBook Export
 
-`docs publish` builds a GitBook-ready tree under `publishing.gitbook.docs_root`.
+`docs publish` builds a GitBook-ready tree under `publishing.gitbook.docs_root`. When you add `--refresh`, it now refreshes NAV data, reruns analysis, and rebuilds the stable market pool before exporting docs.
 
 Generated artifacts include:
 
@@ -87,6 +91,7 @@ Generated artifacts include:
 - `SUMMARY.md`
 - `latest/daily.md`
 - `latest/dca-plan.md`
+- `latest/market-pool.md` when a market pool snapshot is available
 - `latest/backtest.md` when enabled and not hidden for unavailable data
 - `archive/YYYY/MM/DD/...` plus year/month/day index pages
 - `strategy/overview.md`
@@ -96,7 +101,7 @@ The intended workflow is to point GitBook Git Sync at the configured `project_di
 
 Recommended publish flow:
 
-1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180` in CI or before pushing docs changes.
+1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180` in CI or before pushing docs changes. This refresh also rebuilds the stable market pool so GitBook stays in sync with the latest broader-market candidates.
 2. Commit the generated `docs/gitbook/` tree to the same repository that GitBook is syncing.
 3. In GitBook, connect Git Sync to this repository and set the content root to `docs/gitbook`.
 4. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.

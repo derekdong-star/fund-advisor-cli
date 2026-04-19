@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/model"
+	"github.com/derekdong-star/fund-advisor-cli/internal/service"
 	"github.com/derekdong-star/fund-advisor-cli/internal/store"
 )
 
@@ -568,6 +570,181 @@ func TestDocsPublishRemovesStaleBacktestArtifactsWhenUnavailable(t *testing.T) {
 	}
 }
 
+func TestDocsPublishRefreshBuildsMarketPool(t *testing.T) {
+	t.Parallel()
+	originalFetch := fetchForDocsPublish
+	originalAnalyze := analyzeForDocsPublish
+	originalBuild := buildMarketPoolForDocsPublish
+	defer func() {
+		fetchForDocsPublish = originalFetch
+		analyzeForDocsPublish = originalAnalyze
+		buildMarketPoolForDocsPublish = originalBuild
+	}()
+
+	fetchForDocsPublish = func(ctx context.Context, svc *service.Service, days int) error {
+		return nil
+	}
+	analyzeForDocsPublish = func(svc *service.Service) (*model.AnalysisReport, error) {
+		now := time.Date(2026, 4, 19, 9, 0, 0, 0, time.UTC)
+		return &model.AnalysisReport{
+			Summary: model.AnalysisSummary{
+				PortfolioName:  "test",
+				RunDate:        now,
+				PortfolioValue: 100000,
+				ActionCounts:   map[model.Action]int{},
+			},
+			DCAPlan: &model.DCAPlanReport{
+				Summary: model.DCAPlanSummary{
+					PortfolioName: "test",
+					PlanDate:      now,
+					Frequency:     "monthly",
+				},
+			},
+		}, nil
+	}
+	buildMarketPoolForDocsPublish = func(ctx context.Context, svc *service.Service, days int) (*model.MarketPoolReport, error) {
+		now := time.Date(2026, 4, 19, 9, 0, 0, 0, time.UTC)
+		return &model.MarketPoolReport{
+			Summary: model.MarketPoolSummary{
+				RunDate:       now,
+				UniverseCount: 10000,
+				MatchedCount:  120,
+				EligibleCount: 6,
+				SelectedCount: 1,
+				RetainedCount: 1,
+			},
+			Items: []model.MarketPoolItem{{
+				Rank:            1,
+				ThemeKey:        "cn_broad",
+				ThemeLabel:      "A股宽基",
+				FundCode:        "022459",
+				FundName:        "易方达中证A500ETF联接A",
+				Score:           8,
+				Return120D:      0.12,
+				Return250D:      0.21,
+				MaxDrawdown120D: 0.09,
+				FundSizeYi:      32,
+				Retained:        true,
+				Reason:          "250日收益 21.00%；指数工具更稳定",
+			}},
+		}, nil
+	}
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	runner := NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"docs", "publish", "--config", configPath, "--refresh", "--days", "10"})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("docs publish --refresh Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	docsRoot := filepath.Join(dir, "docs", "gitbook")
+	if _, err := os.Stat(filepath.Join(docsRoot, "latest", "market-pool.md")); err != nil {
+		t.Fatalf("expected refreshed market pool page: %v", err)
+	}
+}
+
+func TestDocsPublishIncludesMarketPoolLinksInNavigation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	runner := NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	st, err := store.Open(filepath.Join(dir, "data", "fundcli.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 4, 19, 9, 0, 0, 0, time.UTC)
+	if _, err := st.SaveMarketPool(model.MarketPoolReport{
+		Summary: model.MarketPoolSummary{
+			RunDate:       now,
+			UniverseCount: 10000,
+			MatchedCount:  120,
+			EligibleCount: 6,
+			SelectedCount: 1,
+			RetainedCount: 1,
+		},
+		Items: []model.MarketPoolItem{{
+			Rank:            1,
+			ThemeKey:        "cn_broad",
+			ThemeLabel:      "A股宽基",
+			FundCode:        "022459",
+			FundName:        "易方达中证A500ETF联接A",
+			Score:           8,
+			Return120D:      0.12,
+			Return250D:      0.21,
+			MaxDrawdown120D: 0.09,
+			FundSizeYi:      32,
+			Retained:        true,
+			Reason:          "250日收益 21.00%；指数工具更稳定",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveMarketPool() error = %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"docs", "publish", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("docs publish Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	docsRoot := filepath.Join(dir, "docs", "gitbook")
+	for _, rel := range []string{"latest/market-pool.md", "README.md", "SUMMARY.md"} {
+		buf, err := os.ReadFile(filepath.Join(docsRoot, rel))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", rel, err)
+		}
+		if rel == "latest/market-pool.md" && !bytes.Contains(buf, []byte("Stable Market Pool")) {
+			t.Fatalf("expected market pool page content, got %s", string(buf))
+		}
+		if rel != "latest/market-pool.md" && !bytes.Contains(buf, []byte("market-pool.md")) {
+			t.Fatalf("expected navigation to include market-pool link in %s, got %s", rel, string(buf))
+		}
+	}
+	homepage, err := os.ReadFile(filepath.Join(docsRoot, "README.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(README.md) error = %v", err)
+	}
+	if !bytes.Contains(homepage, []byte("## Dashboard")) {
+		t.Fatalf("expected homepage dashboard section, got %s", string(homepage))
+	}
+	if !bytes.Contains(homepage, []byte("## Theme Snapshot")) {
+		t.Fatalf("expected homepage theme snapshot section, got %s", string(homepage))
+	}
+	if !bytes.Contains(homepage, []byte("A股宽基")) {
+		t.Fatalf("expected homepage to include market theme summary, got %s", string(homepage))
+	}
+}
+
 func TestDocsPublishHidesBacktestWhenUnavailableByDefault(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -693,5 +870,29 @@ func TestLLMPingCommandUsesConfiguredProvider(t *testing.T) {
 		if !bytes.Contains([]byte(got), []byte("top_reason=")) {
 			t.Fatalf("expected llm ping output to include top_reason, got %s", got)
 		}
+	}
+}
+
+func TestMarketPoolCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	marketPoolCmd, _, err := cmd.Find([]string{"market-pool"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if marketPoolCmd == nil {
+		t.Fatalf("expected market-pool command")
+	}
+	formatFlag := marketPoolCmd.Flags().Lookup("format")
+	if formatFlag == nil || formatFlag.DefValue != "table" {
+		t.Fatalf("expected format flag with default table")
+	}
+	daysFlag := marketPoolCmd.Flags().Lookup("days")
+	if daysFlag == nil || daysFlag.DefValue != "300" {
+		t.Fatalf("expected days flag with default 300")
+	}
+	outputFlag := marketPoolCmd.Flags().Lookup("output")
+	if outputFlag == nil {
+		t.Fatalf("expected output flag")
 	}
 }
