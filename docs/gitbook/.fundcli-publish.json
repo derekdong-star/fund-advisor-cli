@@ -1,0 +1,39 @@
+{
+  "last_run_date": "2026-04-19",
+  "latest": {
+    "backtest": {
+      "label": "Strategy Backtest",
+      "path": "latest/backtest.md"
+    },
+    "daily": {
+      "label": "Daily Playbook",
+      "path": "latest/daily.md"
+    },
+    "dca-plan": {
+      "label": "Monthly DCA Plan",
+      "path": "latest/dca-plan.md"
+    },
+    "market-pool": {
+      "label": "Stable Market Pool",
+      "path": "latest/market-pool.md"
+    }
+  },
+  "archive": {
+    "backtest": {
+      "label": "Archived Strategy Backtest",
+      "path": "archive/2026/04/19/backtest.md"
+    },
+    "daily": {
+      "label": "Archived Daily Playbook",
+      "path": "archive/2026/04/19/daily.md"
+    },
+    "dca-plan": {
+      "label": "Archived DCA Plan",
+      "path": "archive/2026/04/19/dca-plan.md"
+    },
+    "market-pool": {
+      "label": "Archived Stable Market Pool",
+      "path": "archive/2026/04/19/market-pool.md"
+    }
+  }
+}
