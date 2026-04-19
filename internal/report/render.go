@@ -64,26 +64,26 @@ func RenderMarketPool(pool model.MarketPoolReport, format string) (string, error
 
 func RenderTable(report model.AnalysisReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Portfolio: %s\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "Run Date: %s\n", report.Summary.RunDate.Format(time.RFC3339))
-	fmt.Fprintf(&buf, "Portfolio Value: %.2f\n", report.Summary.PortfolioValue)
-	fmt.Fprintf(&buf, "Weighted Day Change: %.2f%%\n\n", report.Summary.WeightedDayChangePct*100)
+	fmt.Fprintf(&buf, "组合：%s\n", report.Summary.PortfolioName)
+	fmt.Fprintf(&buf, "运行时间：%s\n", report.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "组合市值：%.2f\n", report.Summary.PortfolioValue)
+	fmt.Fprintf(&buf, "当日加权涨跌：%.2f%%\n\n", report.Summary.WeightedDayChangePct*100)
 
-	buf.WriteString("Action Counts:\n")
+	buf.WriteString("动作统计：\n")
 	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ACTION\tCOUNT")
+	fmt.Fprintln(tw, "动作\t数量")
 	for action, count := range report.Summary.ActionCounts {
-		fmt.Fprintf(tw, "%s\t%d\n", action, count)
+		fmt.Fprintf(tw, "%s\t%d\n", displayAction(action), count)
 	}
 	_ = tw.Flush()
 
 	if len(report.Recommendations) > 0 {
-		buf.WriteString("\nRecommended Actions:\n")
+		buf.WriteString("\n建议动作：\n")
 		tw = tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "ACTION\tFROM\tTO\tWEIGHT\tAMOUNT\tREASON")
+		fmt.Fprintln(tw, "动作\t从\t到\t权重\t金额\t原因")
 		for _, recommendation := range report.Recommendations {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%.2f%%\t%.0f\t%s\n",
-				recommendation.Kind,
+				displayRecommendationKind(recommendation.Kind),
 				displayOrDash(recommendation.SourceFund),
 				displayOrDash(recommendation.TargetFund),
 				recommendation.SuggestedWeight*100,
@@ -95,19 +95,19 @@ func RenderTable(report model.AnalysisReport) string {
 	}
 
 	if report.ExecutionPlan != nil && len(report.ExecutionPlan.Steps) > 0 {
-		buf.WriteString("\nExecution Plan:\n")
-		fmt.Fprintf(&buf, "Gross Sell: %.0f\n", report.ExecutionPlan.GrossSellAmount)
-		fmt.Fprintf(&buf, "Gross Buy: %.0f\n", report.ExecutionPlan.GrossBuyAmount)
-		fmt.Fprintf(&buf, "Swap Amount: %.0f\n", report.ExecutionPlan.SwapAmount)
-		fmt.Fprintf(&buf, "Reduce Amount: %.0f\n", report.ExecutionPlan.ReduceAmount)
-		fmt.Fprintf(&buf, "Buy Amount: %.0f\n", report.ExecutionPlan.BuyAmount)
-		fmt.Fprintf(&buf, "Net Cash Change: %.0f\n\n", report.ExecutionPlan.NetCashChange)
+		buf.WriteString("\n执行计划：\n")
+		fmt.Fprintf(&buf, "总卖出：%.0f\n", report.ExecutionPlan.GrossSellAmount)
+		fmt.Fprintf(&buf, "总买入：%.0f\n", report.ExecutionPlan.GrossBuyAmount)
+		fmt.Fprintf(&buf, "替换金额：%.0f\n", report.ExecutionPlan.SwapAmount)
+		fmt.Fprintf(&buf, "减仓金额：%.0f\n", report.ExecutionPlan.ReduceAmount)
+		fmt.Fprintf(&buf, "买入金额：%.0f\n", report.ExecutionPlan.BuyAmount)
+		fmt.Fprintf(&buf, "净现金变化：%.0f\n\n", report.ExecutionPlan.NetCashChange)
 		tw = tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "STEP\tACTION\tFUND\tRELATED\tAMOUNT\tFUNDING\tREASON")
+		fmt.Fprintln(tw, "步骤\t动作\t基金\t关联\t金额\t资金来源\t原因")
 		for _, step := range report.ExecutionPlan.Steps {
 			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%.0f\t%s\t%s\n",
 				step.Order,
-				step.Action,
+				displayExecutionAction(step.Action),
 				step.Fund,
 				displayOrDash(step.RelatedFund),
 				step.Amount,
@@ -118,12 +118,12 @@ func RenderTable(report model.AnalysisReport) string {
 		_ = tw.Flush()
 	}
 
-	buf.WriteString("\nSignals:\n")
+	buf.WriteString("\n信号列表：\n")
 	tw = tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ACTION\tFUND\tCURRENT\tTARGET\t20D\t60D\tREASON")
+	fmt.Fprintln(tw, "动作\t基金\t当前\t目标\t20日\t60日\t原因")
 	for _, signal := range report.Signals {
 		fmt.Fprintf(tw, "%s\t%s\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%s\n",
-			signal.Action,
+			displayAction(signal.Action),
 			signal.FundName,
 			signal.CurrentWeight*100,
 			signal.TargetWeight*100,
@@ -135,9 +135,9 @@ func RenderTable(report model.AnalysisReport) string {
 	_ = tw.Flush()
 
 	if len(report.Candidates) > 0 {
-		buf.WriteString("\nCandidates:\n")
+		buf.WriteString("\n候选列表：\n")
 		tw = tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "FUND\tSCORE\t20D\t60D\tREPLACE_FOR\tREASON")
+		fmt.Fprintln(tw, "基金\t评分\t20日\t60日\t替代对象\t原因")
 		for _, candidate := range report.Candidates {
 			fmt.Fprintf(tw, "%s\t%d\t%.2f%%\t%.2f%%\t%s\t%s\n",
 				candidate.FundName,
@@ -159,23 +159,23 @@ func RenderMarkdown(report model.AnalysisReport) string {
 	buyRecommendations := filterRecommendations(displayRecommendations, "BUY")
 	executionPlan := buildDisplayExecutionPlan(displayRecommendations)
 
-	fmt.Fprintf(&buf, "# %s Investor Playbook\n\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "- Run Date: `%s`\n", report.Summary.RunDate.Format(time.RFC3339))
-	fmt.Fprintf(&buf, "- Portfolio Value: `%.2f`\n", report.Summary.PortfolioValue)
-	fmt.Fprintf(&buf, "- Weighted Day Change: `%.2f%%`\n", report.Summary.WeightedDayChangePct*100)
+	fmt.Fprintf(&buf, "# %s 投资行动手册\n\n", report.Summary.PortfolioName)
+	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", report.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- 组合市值：`%.2f`\n", report.Summary.PortfolioValue)
+	fmt.Fprintf(&buf, "- 当日加权涨跌：`%.2f%%`\n", report.Summary.WeightedDayChangePct*100)
 	if len(report.Summary.Notes) > 0 {
 		for _, note := range report.Summary.Notes {
-			fmt.Fprintf(&buf, "- Note: %s\n", note)
+			fmt.Fprintf(&buf, "- 备注：%s\n", note)
 		}
 	}
-	buf.WriteString("\n## This Period\n\n")
+	buf.WriteString("\n## 本期结论\n\n")
 	for _, line := range renderPlaybookSummary(report, displayRecommendations) {
 		fmt.Fprintf(&buf, "- %s\n", line)
 	}
 
 	if len(buyRecommendations) > 0 {
-		buf.WriteString("\n## Continue DCA\n\n")
-		buf.WriteString("| Fund | Amount | Weight | Reason |\n")
+		buf.WriteString("\n## 继续定投\n\n")
+		buf.WriteString("| 基金 | 金额 | 权重 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | --- |\n")
 		for _, recommendation := range buyRecommendations {
 			fmt.Fprintf(&buf, "| %s | %.0f | %.2f%% | %s |\n",
@@ -186,14 +186,14 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 		if report.DCAPlan != nil && report.DCAPlan.Summary.ReserveAmount > 0 {
-			fmt.Fprintf(&buf, "\n- Monthly DCA Reserve: `%.0f`\n", report.DCAPlan.Summary.ReserveAmount)
+			fmt.Fprintf(&buf, "\n- 本月定投预留：`%.0f`\n", report.DCAPlan.Summary.ReserveAmount)
 		}
 	}
 
 	reduceRecommendations := filterRecommendations(displayRecommendations, "REDUCE")
 	if len(reduceRecommendations) > 0 {
-		buf.WriteString("\n## Trim Exposure\n\n")
-		buf.WriteString("| Fund | Amount | Weight | Reason |\n")
+		buf.WriteString("\n## 减仓观察\n\n")
+		buf.WriteString("| 基金 | 金额 | 权重 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | --- |\n")
 		for _, recommendation := range reduceRecommendations {
 			fmt.Fprintf(&buf, "| %s | %.0f | %.2f%% | %s |\n",
@@ -207,8 +207,8 @@ func RenderMarkdown(report model.AnalysisReport) string {
 
 	swapRecommendations := filterRecommendations(displayRecommendations, "SWAP")
 	if len(swapRecommendations) > 0 {
-		buf.WriteString("\n## Replacement Watch\n\n")
-		buf.WriteString("| From | To | Amount | Weight | Reason |\n")
+		buf.WriteString("\n## 替换观察\n\n")
+		buf.WriteString("| 从 | 到 | 金额 | 权重 | 原因 |\n")
 		buf.WriteString("| --- | --- | ---: | ---: | --- |\n")
 		for _, recommendation := range swapRecommendations {
 			fmt.Fprintf(&buf, "| %s | %s | %.0f | %.2f%% | %s |\n",
@@ -223,8 +223,8 @@ func RenderMarkdown(report model.AnalysisReport) string {
 
 	holdSignals := filterSignals(report.Signals, model.ActionHold)
 	if len(holdSignals) > 0 {
-		buf.WriteString("\n## Continue Holding\n\n")
-		buf.WriteString("| Fund | Current | Target | 20D | 60D | Reason |\n")
+		buf.WriteString("\n## 继续持有\n\n")
+		buf.WriteString("| 基金 | 当前 | 目标 | 20日 | 60日 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | ---: | ---: | --- |\n")
 		for _, signal := range holdSignals {
 			fmt.Fprintf(&buf, "| %s | %.2f%% | %.2f%% | %.2f%% | %.2f%% | %s |\n",
@@ -240,8 +240,8 @@ func RenderMarkdown(report model.AnalysisReport) string {
 
 	pauseSignals := filterSignals(report.Signals, model.ActionPauseBuy)
 	if len(pauseSignals) > 0 {
-		buf.WriteString("\n## Pause Adding\n\n")
-		buf.WriteString("| Fund | Current | Target | 20D | 60D | Reason |\n")
+		buf.WriteString("\n## 暂停加仓\n\n")
+		buf.WriteString("| 基金 | 当前 | 目标 | 20日 | 60日 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | ---: | ---: | --- |\n")
 		for _, signal := range pauseSignals {
 			fmt.Fprintf(&buf, "| %s | %.2f%% | %.2f%% | %.2f%% | %.2f%% | %s |\n",
@@ -256,19 +256,19 @@ func RenderMarkdown(report model.AnalysisReport) string {
 	}
 
 	if executionPlan != nil && len(executionPlan.Steps) > 0 {
-		buf.WriteString("\n## Execution Order\n\n")
-		fmt.Fprintf(&buf, "- Gross Sell: `%.0f`\n", executionPlan.GrossSellAmount)
-		fmt.Fprintf(&buf, "- Gross Buy: `%.0f`\n", executionPlan.GrossBuyAmount)
-		fmt.Fprintf(&buf, "- Swap Amount: `%.0f`\n", executionPlan.SwapAmount)
-		fmt.Fprintf(&buf, "- Reduce Amount: `%.0f`\n", executionPlan.ReduceAmount)
-		fmt.Fprintf(&buf, "- Buy Amount: `%.0f`\n", executionPlan.BuyAmount)
-		fmt.Fprintf(&buf, "- Net Cash Change: `%.0f`\n\n", executionPlan.NetCashChange)
-		buf.WriteString("| Step | Action | Fund | Related | Amount | Funding | Reason |\n")
+		buf.WriteString("\n## 执行顺序\n\n")
+		fmt.Fprintf(&buf, "- 总卖出：`%.0f`\n", executionPlan.GrossSellAmount)
+		fmt.Fprintf(&buf, "- 总买入：`%.0f`\n", executionPlan.GrossBuyAmount)
+		fmt.Fprintf(&buf, "- 替换金额：`%.0f`\n", executionPlan.SwapAmount)
+		fmt.Fprintf(&buf, "- 减仓金额：`%.0f`\n", executionPlan.ReduceAmount)
+		fmt.Fprintf(&buf, "- 买入金额：`%.0f`\n", executionPlan.BuyAmount)
+		fmt.Fprintf(&buf, "- 净现金变化：`%.0f`\n\n", executionPlan.NetCashChange)
+		buf.WriteString("| 步骤 | 动作 | 基金 | 关联 | 金额 | 资金来源 | 原因 |\n")
 		buf.WriteString("| ---: | --- | --- | --- | ---: | --- | --- |\n")
 		for _, step := range executionPlan.Steps {
 			fmt.Fprintf(&buf, "| %d | %s | %s | %s | %.0f | %s | %s |\n",
 				step.Order,
-				step.Action,
+				displayExecutionAction(step.Action),
 				step.Fund,
 				displayOrDash(step.RelatedFund),
 				step.Amount,
@@ -278,8 +278,8 @@ func RenderMarkdown(report model.AnalysisReport) string {
 		}
 	}
 	if len(report.Candidates) > 0 {
-		buf.WriteString("\n## Candidate Replacements\n\n")
-		buf.WriteString("| Fund | Score | 20D | 60D | Replace For | Reason |\n")
+		buf.WriteString("\n## 候选替代\n\n")
+		buf.WriteString("| 基金 | 评分 | 20日 | 60日 | 替代对象 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | ---: | --- | --- |\n")
 		for _, candidate := range report.Candidates {
 			fmt.Fprintf(&buf, "| %s | %d | %.2f%% | %.2f%% | %s | %s |\n",
@@ -446,7 +446,7 @@ func displayReason(ruleReason, enhancedReason string) string {
 	case ruleReason == "":
 		return enhancedReason
 	default:
-		return fmt.Sprintf("%s Rule basis: %s", enhancedReason, ruleReason)
+		return fmt.Sprintf("%s 规则依据：%s", enhancedReason, ruleReason)
 	}
 }
 
@@ -500,24 +500,24 @@ func displayOrDash(value string) string {
 
 func renderDCAPlanTable(plan model.DCAPlanReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "DCA Plan: %s\n", plan.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "Plan Date: %s\n", plan.Summary.PlanDate.Format(time.RFC3339))
-	fmt.Fprintf(&buf, "Frequency: %s\n", plan.Summary.Frequency)
-	fmt.Fprintf(&buf, "Budget: %.0f\n", plan.Summary.Budget)
-	fmt.Fprintf(&buf, "Planned: %.0f\n", plan.Summary.PlannedAmount)
-	fmt.Fprintf(&buf, "Reserve: %.0f\n", plan.Summary.ReserveAmount)
-	fmt.Fprintf(&buf, "Eligible Funds: %d\n", plan.Summary.EligibleFundCount)
-	fmt.Fprintf(&buf, "Selected Funds: %d\n\n", plan.Summary.SelectedFundCount)
+	fmt.Fprintf(&buf, "定投计划：%s\n", plan.Summary.PortfolioName)
+	fmt.Fprintf(&buf, "计划日期：%s\n", plan.Summary.PlanDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "频率：%s\n", displayDCAFrequency(plan.Summary.Frequency))
+	fmt.Fprintf(&buf, "预算：%.0f\n", plan.Summary.Budget)
+	fmt.Fprintf(&buf, "已计划：%.0f\n", plan.Summary.PlannedAmount)
+	fmt.Fprintf(&buf, "预留：%.0f\n", plan.Summary.ReserveAmount)
+	fmt.Fprintf(&buf, "可选基金数：%d\n", plan.Summary.EligibleFundCount)
+	fmt.Fprintf(&buf, "入选基金数：%d\n\n", plan.Summary.SelectedFundCount)
 
 	if len(plan.Items) > 0 {
-		buf.WriteString("Invest This Period:\n")
+		buf.WriteString("本期执行：\n")
 		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "PRIORITY\tFUND\tROLE\tCURRENT\tTARGET\tGAP\tAMOUNT\tREASON")
+		fmt.Fprintln(tw, "优先级\t基金\t角色\t当前\t目标\t差距\t金额\t原因")
 		for _, item := range plan.Items {
 			fmt.Fprintf(tw, "%d\t%s\t%s\t%.2f%%\t%.2f%%\t%.2f%%\t%.0f\t%s\n",
 				item.Priority,
 				item.FundName,
-				item.Role,
+				displayFundRole(item.Role),
 				item.CurrentWeight*100,
 				item.TargetWeight*100,
 				item.GapWeight*100,
@@ -529,17 +529,17 @@ func renderDCAPlanTable(plan model.DCAPlanReport) string {
 	}
 
 	if len(plan.Skipped) > 0 {
-		buf.WriteString("\nSkipped This Period:\n")
+		buf.WriteString("\n本期跳过：\n")
 		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "FUND\tACTION\tREASON")
+		fmt.Fprintln(tw, "基金\t动作\t原因")
 		for _, item := range plan.Skipped {
-			fmt.Fprintf(tw, "%s\t%s\t%s\n", item.FundName, item.Action, item.Reason)
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", item.FundName, displayAction(item.Action), item.Reason)
 		}
 		_ = tw.Flush()
 	}
 
 	if len(plan.Summary.Notes) > 0 {
-		buf.WriteString("\nNotes:\n")
+		buf.WriteString("\n备注：\n")
 		for _, note := range plan.Summary.Notes {
 			fmt.Fprintf(&buf, "- %s\n", note)
 		}
@@ -550,24 +550,24 @@ func renderDCAPlanTable(plan model.DCAPlanReport) string {
 
 func renderDCAPlanMarkdown(plan model.DCAPlanReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "# %s DCA Plan\n\n", plan.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "- Plan Date: `%s`\n", plan.Summary.PlanDate.Format(time.RFC3339))
-	fmt.Fprintf(&buf, "- Frequency: `%s`\n", plan.Summary.Frequency)
-	fmt.Fprintf(&buf, "- Budget: `%.0f`\n", plan.Summary.Budget)
-	fmt.Fprintf(&buf, "- Planned: `%.0f`\n", plan.Summary.PlannedAmount)
-	fmt.Fprintf(&buf, "- Reserve: `%.0f`\n", plan.Summary.ReserveAmount)
-	fmt.Fprintf(&buf, "- Eligible Funds: `%d`\n", plan.Summary.EligibleFundCount)
-	fmt.Fprintf(&buf, "- Selected Funds: `%d`\n", plan.Summary.SelectedFundCount)
+	fmt.Fprintf(&buf, "# %s 定投计划\n\n", plan.Summary.PortfolioName)
+	fmt.Fprintf(&buf, "- 计划日期：`%s`\n", plan.Summary.PlanDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- 频率：`%s`\n", displayDCAFrequency(plan.Summary.Frequency))
+	fmt.Fprintf(&buf, "- 预算：`%.0f`\n", plan.Summary.Budget)
+	fmt.Fprintf(&buf, "- 已计划：`%.0f`\n", plan.Summary.PlannedAmount)
+	fmt.Fprintf(&buf, "- 预留：`%.0f`\n", plan.Summary.ReserveAmount)
+	fmt.Fprintf(&buf, "- 可选基金数：`%d`\n", plan.Summary.EligibleFundCount)
+	fmt.Fprintf(&buf, "- 入选基金数：`%d`\n", plan.Summary.SelectedFundCount)
 
 	if len(plan.Items) > 0 {
-		buf.WriteString("\n## Invest This Period\n\n")
-		buf.WriteString("| Priority | Fund | Role | Current | Target | Gap | Amount | Reason |\n")
+		buf.WriteString("\n## 本期执行\n\n")
+		buf.WriteString("| 优先级 | 基金 | 角色 | 当前 | 目标 | 差距 | 金额 | 原因 |\n")
 		buf.WriteString("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |\n")
 		for _, item := range plan.Items {
 			fmt.Fprintf(&buf, "| %d | %s | %s | %.2f%% | %.2f%% | %.2f%% | %.0f | %s |\n",
 				item.Priority,
 				item.FundName,
-				item.Role,
+				displayFundRole(item.Role),
 				item.CurrentWeight*100,
 				item.TargetWeight*100,
 				item.GapWeight*100,
@@ -578,16 +578,16 @@ func renderDCAPlanMarkdown(plan model.DCAPlanReport) string {
 	}
 
 	if len(plan.Skipped) > 0 {
-		buf.WriteString("\n## Skipped This Period\n\n")
-		buf.WriteString("| Fund | Action | Reason |\n")
+		buf.WriteString("\n## 本期跳过\n\n")
+		buf.WriteString("| 基金 | 动作 | 原因 |\n")
 		buf.WriteString("| --- | --- | --- |\n")
 		for _, item := range plan.Skipped {
-			fmt.Fprintf(&buf, "| %s | %s | %s |\n", item.FundName, item.Action, item.Reason)
+			fmt.Fprintf(&buf, "| %s | %s | %s |\n", item.FundName, displayAction(item.Action), item.Reason)
 		}
 	}
 
 	if len(plan.Summary.Notes) > 0 {
-		buf.WriteString("\n## Notes\n\n")
+		buf.WriteString("\n## 备注\n\n")
 		for _, note := range plan.Summary.Notes {
 			fmt.Fprintf(&buf, "- %s\n", note)
 		}
@@ -615,39 +615,39 @@ func RenderBacktest(report model.BacktestReport, format string) (string, error) 
 
 func renderBacktestTable(report model.BacktestReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Backtest: %s\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "Range: %s -> %s\n", report.Summary.StartDate.Format("2006-01-02"), report.Summary.EndDate.Format("2006-01-02"))
-	fmt.Fprintf(&buf, "Trading Days: %d\n", report.Summary.TradingDays)
-	fmt.Fprintf(&buf, "Rebalance Every: %d\n\n", report.Summary.RebalanceEvery)
+	fmt.Fprintf(&buf, "回测：%s\n", report.Summary.PortfolioName)
+	fmt.Fprintf(&buf, "区间：%s -> %s\n", report.Summary.StartDate.Format("2006-01-02"), report.Summary.EndDate.Format("2006-01-02"))
+	fmt.Fprintf(&buf, "交易日：%d\n", report.Summary.TradingDays)
+	fmt.Fprintf(&buf, "调仓间隔：%d\n\n", report.Summary.RebalanceEvery)
 
 	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "METRIC\tVALUE")
-	fmt.Fprintf(tw, "Initial Value\t%.2f\n", report.Summary.InitialValue)
-	fmt.Fprintf(tw, "Final Value\t%.2f\n", report.Summary.FinalValue)
-	fmt.Fprintf(tw, "Benchmark Final\t%.2f\n", report.Summary.BenchmarkFinalValue)
-	fmt.Fprintf(tw, "Total Return\t%.2f%%\n", report.Summary.TotalReturn*100)
-	fmt.Fprintf(tw, "Benchmark Return\t%.2f%%\n", report.Summary.BenchmarkReturn*100)
-	fmt.Fprintf(tw, "Excess Return\t%.2f%%\n", report.Summary.ExcessReturn*100)
-	fmt.Fprintf(tw, "Annualized Return\t%.2f%%\n", report.Summary.AnnualizedReturn*100)
-	fmt.Fprintf(tw, "Benchmark Annualized\t%.2f%%\n", report.Summary.BenchmarkAnnualizedReturn*100)
-	fmt.Fprintf(tw, "Max Drawdown\t%.2f%%\n", report.Summary.MaxDrawdown*100)
-	fmt.Fprintf(tw, "Benchmark Max Drawdown\t%.2f%%\n", report.Summary.BenchmarkMaxDrawdown*100)
-	fmt.Fprintf(tw, "Rebalance Count\t%d\n", report.Summary.RebalanceCount)
-	fmt.Fprintf(tw, "Trade Count\t%d\n", report.Summary.TradeCount)
-	fmt.Fprintf(tw, "Final Cash\t%.2f\n", report.Summary.CashFinal)
+	fmt.Fprintln(tw, "指标\t数值")
+	fmt.Fprintf(tw, "初始市值\t%.2f\n", report.Summary.InitialValue)
+	fmt.Fprintf(tw, "最终市值\t%.2f\n", report.Summary.FinalValue)
+	fmt.Fprintf(tw, "基准最终市值\t%.2f\n", report.Summary.BenchmarkFinalValue)
+	fmt.Fprintf(tw, "总收益率\t%.2f%%\n", report.Summary.TotalReturn*100)
+	fmt.Fprintf(tw, "基准收益率\t%.2f%%\n", report.Summary.BenchmarkReturn*100)
+	fmt.Fprintf(tw, "超额收益\t%.2f%%\n", report.Summary.ExcessReturn*100)
+	fmt.Fprintf(tw, "年化收益率\t%.2f%%\n", report.Summary.AnnualizedReturn*100)
+	fmt.Fprintf(tw, "基准年化收益率\t%.2f%%\n", report.Summary.BenchmarkAnnualizedReturn*100)
+	fmt.Fprintf(tw, "最大回撤\t%.2f%%\n", report.Summary.MaxDrawdown*100)
+	fmt.Fprintf(tw, "基准最大回撤\t%.2f%%\n", report.Summary.BenchmarkMaxDrawdown*100)
+	fmt.Fprintf(tw, "调仓次数\t%d\n", report.Summary.RebalanceCount)
+	fmt.Fprintf(tw, "交易次数\t%d\n", report.Summary.TradeCount)
+	fmt.Fprintf(tw, "期末现金\t%.2f\n", report.Summary.CashFinal)
 	_ = tw.Flush()
 
 	if len(report.Summary.Notes) > 0 {
-		buf.WriteString("\nNotes:\n")
+		buf.WriteString("\n备注：\n")
 		for _, note := range report.Summary.Notes {
 			fmt.Fprintf(&buf, "- %s\n", note)
 		}
 	}
 
 	if len(report.Trades) > 0 {
-		buf.WriteString("\nRecent Trades:\n")
+		buf.WriteString("\n近期交易：\n")
 		tw = tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "DATE\tACTION\tFUND\tRELATED\tAMOUNT\tPRICE\tUNITS")
+		fmt.Fprintln(tw, "日期\t动作\t基金\t关联\t金额\t价格\t份额")
 		start := 0
 		if len(report.Trades) > 10 {
 			start = len(report.Trades) - 10
@@ -655,7 +655,7 @@ func renderBacktestTable(report model.BacktestReport) string {
 		for _, trade := range report.Trades[start:] {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%.0f\t%.4f\t%.4f\n",
 				trade.Date.Format("2006-01-02"),
-				trade.Action,
+				displayExecutionAction(trade.Action),
 				trade.Fund,
 				displayOrDash(trade.RelatedFund),
 				trade.Amount,
@@ -671,36 +671,36 @@ func renderBacktestTable(report model.BacktestReport) string {
 
 func renderBacktestMarkdown(report model.BacktestReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "# %s Backtest\n\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "- Range: `%s` -> `%s`\n", report.Summary.StartDate.Format("2006-01-02"), report.Summary.EndDate.Format("2006-01-02"))
-	fmt.Fprintf(&buf, "- Trading Days: `%d`\n", report.Summary.TradingDays)
-	fmt.Fprintf(&buf, "- Rebalance Every: `%d`\n", report.Summary.RebalanceEvery)
-	fmt.Fprintf(&buf, "- Rebalance Count: `%d`\n", report.Summary.RebalanceCount)
-	fmt.Fprintf(&buf, "- Trade Count: `%d`\n\n", report.Summary.TradeCount)
-	buf.WriteString("| Metric | Value |\n")
+	fmt.Fprintf(&buf, "# %s 策略回测\n\n", report.Summary.PortfolioName)
+	fmt.Fprintf(&buf, "- 区间：`%s` -> `%s`\n", report.Summary.StartDate.Format("2006-01-02"), report.Summary.EndDate.Format("2006-01-02"))
+	fmt.Fprintf(&buf, "- 交易日：`%d`\n", report.Summary.TradingDays)
+	fmt.Fprintf(&buf, "- 调仓间隔：`%d`\n", report.Summary.RebalanceEvery)
+	fmt.Fprintf(&buf, "- 调仓次数：`%d`\n", report.Summary.RebalanceCount)
+	fmt.Fprintf(&buf, "- 交易次数：`%d`\n\n", report.Summary.TradeCount)
+	buf.WriteString("| 指标 | 数值 |\n")
 	buf.WriteString("| --- | ---: |\n")
-	fmt.Fprintf(&buf, "| Initial Value | %.2f |\n", report.Summary.InitialValue)
-	fmt.Fprintf(&buf, "| Final Value | %.2f |\n", report.Summary.FinalValue)
-	fmt.Fprintf(&buf, "| Benchmark Final | %.2f |\n", report.Summary.BenchmarkFinalValue)
-	fmt.Fprintf(&buf, "| Total Return | %.2f%% |\n", report.Summary.TotalReturn*100)
-	fmt.Fprintf(&buf, "| Benchmark Return | %.2f%% |\n", report.Summary.BenchmarkReturn*100)
-	fmt.Fprintf(&buf, "| Excess Return | %.2f%% |\n", report.Summary.ExcessReturn*100)
-	fmt.Fprintf(&buf, "| Annualized Return | %.2f%% |\n", report.Summary.AnnualizedReturn*100)
-	fmt.Fprintf(&buf, "| Benchmark Annualized | %.2f%% |\n", report.Summary.BenchmarkAnnualizedReturn*100)
-	fmt.Fprintf(&buf, "| Max Drawdown | %.2f%% |\n", report.Summary.MaxDrawdown*100)
-	fmt.Fprintf(&buf, "| Benchmark Max Drawdown | %.2f%% |\n", report.Summary.BenchmarkMaxDrawdown*100)
-	fmt.Fprintf(&buf, "| Final Cash | %.2f |\n", report.Summary.CashFinal)
+	fmt.Fprintf(&buf, "| 初始市值 | %.2f |\n", report.Summary.InitialValue)
+	fmt.Fprintf(&buf, "| 最终市值 | %.2f |\n", report.Summary.FinalValue)
+	fmt.Fprintf(&buf, "| 基准最终市值 | %.2f |\n", report.Summary.BenchmarkFinalValue)
+	fmt.Fprintf(&buf, "| 总收益率 | %.2f%% |\n", report.Summary.TotalReturn*100)
+	fmt.Fprintf(&buf, "| 基准收益率 | %.2f%% |\n", report.Summary.BenchmarkReturn*100)
+	fmt.Fprintf(&buf, "| 超额收益 | %.2f%% |\n", report.Summary.ExcessReturn*100)
+	fmt.Fprintf(&buf, "| 年化收益率 | %.2f%% |\n", report.Summary.AnnualizedReturn*100)
+	fmt.Fprintf(&buf, "| 基准年化收益率 | %.2f%% |\n", report.Summary.BenchmarkAnnualizedReturn*100)
+	fmt.Fprintf(&buf, "| 最大回撤 | %.2f%% |\n", report.Summary.MaxDrawdown*100)
+	fmt.Fprintf(&buf, "| 基准最大回撤 | %.2f%% |\n", report.Summary.BenchmarkMaxDrawdown*100)
+	fmt.Fprintf(&buf, "| 期末现金 | %.2f |\n", report.Summary.CashFinal)
 
 	if len(report.Summary.Notes) > 0 {
-		buf.WriteString("\n## Notes\n\n")
+		buf.WriteString("\n## 备注\n\n")
 		for _, note := range report.Summary.Notes {
 			fmt.Fprintf(&buf, "- %s\n", note)
 		}
 	}
 
 	if len(report.Trades) > 0 {
-		buf.WriteString("\n## Recent Trades\n\n")
-		buf.WriteString("| Date | Action | Fund | Related | Amount | Price | Units |\n")
+		buf.WriteString("\n## 近期交易\n\n")
+		buf.WriteString("| 日期 | 动作 | 基金 | 关联 | 金额 | 价格 | 份额 |\n")
 		buf.WriteString("| --- | --- | --- | --- | ---: | ---: | ---: |\n")
 		start := 0
 		if len(report.Trades) > 10 {
@@ -709,7 +709,7 @@ func renderBacktestMarkdown(report model.BacktestReport) string {
 		for _, trade := range report.Trades[start:] {
 			fmt.Fprintf(&buf, "| %s | %s | %s | %s | %.0f | %.4f | %.4f |\n",
 				trade.Date.Format("2006-01-02"),
-				trade.Action,
+				displayExecutionAction(trade.Action),
 				trade.Fund,
 				displayOrDash(trade.RelatedFund),
 				trade.Amount,
@@ -724,25 +724,25 @@ func renderBacktestMarkdown(report model.BacktestReport) string {
 
 func renderMarketPoolTable(pool model.MarketPoolReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "Market Pool Run Date: %s\n", pool.Summary.RunDate.Format(time.RFC3339))
-	fmt.Fprintf(&buf, "Universe Count: %d\n", pool.Summary.UniverseCount)
-	fmt.Fprintf(&buf, "Matched Count: %d\n", pool.Summary.MatchedCount)
-	fmt.Fprintf(&buf, "Eligible Count: %d\n", pool.Summary.EligibleCount)
-	fmt.Fprintf(&buf, "Selected Count: %d\n", pool.Summary.SelectedCount)
-	fmt.Fprintf(&buf, "Retained Count: %d\n", pool.Summary.RetainedCount)
+	fmt.Fprintf(&buf, "候选池运行时间：%s\n", pool.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "全市场基金数：%d\n", pool.Summary.UniverseCount)
+	fmt.Fprintf(&buf, "主题匹配数：%d\n", pool.Summary.MatchedCount)
+	fmt.Fprintf(&buf, "满足阈值数：%d\n", pool.Summary.EligibleCount)
+	fmt.Fprintf(&buf, "最终入选数：%d\n", pool.Summary.SelectedCount)
+	fmt.Fprintf(&buf, "沿用上期数：%d\n", pool.Summary.RetainedCount)
 	if len(pool.Summary.Notes) > 0 {
-		buf.WriteString("\nNotes:\n")
+		buf.WriteString("\n备注：\n")
 		for _, note := range pool.Summary.Notes {
 			fmt.Fprintf(&buf, "- %s\n", note)
 		}
 	}
 	if len(pool.Items) == 0 {
-		buf.WriteString("\nNo market pool candidates selected.\n")
+		buf.WriteString("\n当前没有筛选出稳定候选。\n")
 		return buf.String()
 	}
-	buf.WriteString("\nCandidates:\n")
+	buf.WriteString("\n候选列表：\n")
 	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "RANK	THEME	FUND	SCORE	120D	250D	MDD120	SIZE	RET	REASON")
+	fmt.Fprintln(tw, "排名	主题	基金	评分	120日	250日	120日最大回撤	规模	保留	原因")
 	for _, item := range pool.Items {
 		fmt.Fprintf(tw, "%d	%s	%s	%d	%.2f%%	%.2f%%	%.2f%%	%.1f亿	%s	%s\n",
 			item.Rank,
@@ -763,25 +763,25 @@ func renderMarketPoolTable(pool model.MarketPoolReport) string {
 
 func renderMarketPoolMarkdown(pool model.MarketPoolReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "# Stable Market Pool\n\n")
-	fmt.Fprintf(&buf, "- Run Date: `%s`\n", pool.Summary.RunDate.Format(time.RFC3339))
-	fmt.Fprintf(&buf, "- Universe Count: `%d`\n", pool.Summary.UniverseCount)
-	fmt.Fprintf(&buf, "- Matched Count: `%d`\n", pool.Summary.MatchedCount)
-	fmt.Fprintf(&buf, "- Eligible Count: `%d`\n", pool.Summary.EligibleCount)
-	fmt.Fprintf(&buf, "- Selected Count: `%d`\n", pool.Summary.SelectedCount)
-	fmt.Fprintf(&buf, "- Retained Count: `%d`\n", pool.Summary.RetainedCount)
+	fmt.Fprintf(&buf, "# 稳定候选池\n\n")
+	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", pool.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- 全市场基金数：`%d`\n", pool.Summary.UniverseCount)
+	fmt.Fprintf(&buf, "- 主题匹配数：`%d`\n", pool.Summary.MatchedCount)
+	fmt.Fprintf(&buf, "- 满足阈值数：`%d`\n", pool.Summary.EligibleCount)
+	fmt.Fprintf(&buf, "- 最终入选数：`%d`\n", pool.Summary.SelectedCount)
+	fmt.Fprintf(&buf, "- 沿用上期数：`%d`\n", pool.Summary.RetainedCount)
 	if len(pool.Summary.Notes) > 0 {
-		buf.WriteString("\n## Notes\n\n")
+		buf.WriteString("\n## 备注\n\n")
 		for _, note := range pool.Summary.Notes {
 			fmt.Fprintf(&buf, "- %s\n", note)
 		}
 	}
 	if len(pool.Items) == 0 {
-		buf.WriteString("\n## Candidates\n\n- No stable market pool candidates selected.\n")
+		buf.WriteString("\n## 候选列表\n\n- 当前没有筛选出稳定候选。\n")
 		return buf.String()
 	}
-	buf.WriteString("\n## Candidates\n\n")
-	buf.WriteString("| Rank | Theme | Fund | Score | 120D | 250D | Max Drawdown 120D | Size | Retained | Reason |\n")
+	buf.WriteString("\n## 候选列表\n\n")
+	buf.WriteString("| 排名 | 主题 | 基金 | 评分 | 120日 | 250日 | 120日最大回撤 | 规模 | 保留 | 原因 |\n")
 	buf.WriteString("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |\n")
 	for _, item := range pool.Items {
 		fmt.Fprintf(&buf, "| %d | %s | %s | %d | %.2f%% | %.2f%% | %.2f%% | %.1f亿 | %s | %s |\n",
@@ -802,7 +802,74 @@ func renderMarketPoolMarkdown(pool model.MarketPoolReport) string {
 
 func yesNo(value bool) string {
 	if value {
-		return "yes"
+		return "是"
 	}
-	return "no"
+	return "否"
+}
+
+func displayAction(action model.Action) string {
+	switch action {
+	case model.ActionBuy:
+		return "买入"
+	case model.ActionHold:
+		return "持有"
+	case model.ActionPauseBuy:
+		return "暂停加仓"
+	case model.ActionReduce:
+		return "减仓"
+	case model.ActionReplaceWatch:
+		return "替换观察"
+	default:
+		return string(action)
+	}
+}
+
+func displayRecommendationKind(kind string) string {
+	switch strings.ToUpper(strings.TrimSpace(kind)) {
+	case "BUY":
+		return "买入"
+	case "REDUCE":
+		return "减仓"
+	case "SWAP":
+		return "替换"
+	default:
+		return kind
+	}
+}
+
+func displayExecutionAction(action string) string {
+	switch strings.ToUpper(strings.TrimSpace(action)) {
+	case "BUY":
+		return "买入"
+	case "SELL":
+		return "卖出"
+	default:
+		return action
+	}
+}
+
+func displayDCAFrequency(frequency string) string {
+	switch strings.ToLower(strings.TrimSpace(frequency)) {
+	case "monthly":
+		return "每月"
+	case "weekly":
+		return "每周"
+	default:
+		return frequency
+	}
+}
+
+func displayFundRole(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "core":
+		return "核心"
+	case "satellite":
+		return "卫星"
+	case "hedge":
+		return "对冲"
+	case "stabilizer":
+		return "稳健"
+	default:
+		return role
+	}
 }

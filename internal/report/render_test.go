@@ -45,40 +45,40 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 			CreatedAt:       now,
 		}},
 	})
-	if !strings.Contains(rendered, "# test Investor Playbook") {
+	if !strings.Contains(rendered, "# test 投资行动手册") {
 		t.Fatalf("expected playbook heading in markdown output")
 	}
-	if !strings.Contains(rendered, "## Replacement Watch") {
+	if !strings.Contains(rendered, "## 替换观察") {
 		t.Fatalf("expected replacement section in markdown output")
 	}
 	if !strings.Contains(rendered, "| Old Fund | New Fund | 5000 | 5.00% | replacement |") {
 		t.Fatalf("expected rendered recommendation row, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "## Continue Holding") {
+	if !strings.Contains(rendered, "## 继续持有") {
 		t.Fatalf("expected hold section, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "## Pause Adding") {
+	if !strings.Contains(rendered, "## 暂停加仓") {
 		t.Fatalf("expected pause section, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "## Continue DCA") {
+	if !strings.Contains(rendered, "## 继续定投") {
 		t.Fatalf("expected continue dca section, got %s", rendered)
 	}
 	if !strings.Contains(rendered, "| Monthly Core | 4000 | 4.00% | 按月定投 |") {
 		t.Fatalf("expected dca row from monthly plan, got %s", rendered)
 	}
-	if strings.Contains(rendered, "## Monthly DCA Snapshot") {
+	if strings.Contains(rendered, "## 月度定投快照") {
 		t.Fatalf("did not expect separate monthly dca snapshot, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "## Execution Order") {
+	if !strings.Contains(rendered, "## 执行顺序") {
 		t.Fatalf("expected execution order section, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "| 2 | BUY | New Fund | Old Fund | 5000 | 卖出 Old Fund | replacement |") {
+	if !strings.Contains(rendered, "| 2 | 买入 | New Fund | Old Fund | 5000 | 卖出 Old Fund | replacement |") {
 		t.Fatalf("expected swap execution row, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "| 3 | BUY | Monthly Core | - | 4000 | 组合卖出回笼资金 | 按月定投 |") {
+	if !strings.Contains(rendered, "| 3 | 买入 | Monthly Core | - | 4000 | 组合卖出回笼资金 | 按月定投 |") {
 		t.Fatalf("expected dca execution row, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "- Monthly DCA Reserve: `1000`") {
+	if !strings.Contains(rendered, "- 本月定投预留：`1000`") {
 		t.Fatalf("expected monthly dca reserve note, got %s", rendered)
 	}
 }
@@ -119,10 +119,10 @@ func TestRenderBacktestMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderBacktest() error = %v", err)
 	}
-	if !strings.Contains(rendered, "# test Backtest") {
+	if !strings.Contains(rendered, "# test 策略回测") {
 		t.Fatalf("expected backtest heading, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "| Total Return | 8.00% |") {
+	if !strings.Contains(rendered, "| 总收益率 | 8.00% |") {
 		t.Fatalf("expected total return row, got %s", rendered)
 	}
 }
@@ -162,16 +162,16 @@ func TestRenderDCAPlanMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderDCAPlan() error = %v", err)
 	}
-	if !strings.Contains(rendered, "# test DCA Plan") {
+	if !strings.Contains(rendered, "# test 定投计划") {
 		t.Fatalf("expected dca plan heading, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "## Invest This Period") {
+	if !strings.Contains(rendered, "## 本期执行") {
 		t.Fatalf("expected invest section, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "| 1 | Core Fund | core | 10.00% | 20.00% | 10.00% | 4000 | 继续定投 |") {
+	if !strings.Contains(rendered, "| 1 | Core Fund | 核心 | 10.00% | 20.00% | 10.00% | 4000 | 继续定投 |") {
 		t.Fatalf("expected item row, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "| Paused Fund | PAUSE_BUY | 短期风险偏高 |") {
+	if !strings.Contains(rendered, "| Paused Fund | 暂停加仓 | 短期风险偏高 |") {
 		t.Fatalf("expected skipped row, got %s", rendered)
 	}
 }
@@ -201,10 +201,10 @@ func TestRenderMarkdownPrefersEnhancedReasons(t *testing.T) {
 			EnhancedReason: "LLM keeps New Fund first because its medium-term trend is cleaner.",
 		}},
 	})
-	if !strings.Contains(rendered, "LLM prefers New Fund for stronger persistence. Rule basis: rule replacement") {
+	if !strings.Contains(rendered, "LLM prefers New Fund for stronger persistence. 规则依据：rule replacement") {
 		t.Fatalf("expected enhanced recommendation reason, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "LLM keeps New Fund first because its medium-term trend is cleaner. Rule basis: rule candidate") {
+	if !strings.Contains(rendered, "LLM keeps New Fund first because its medium-term trend is cleaner. 规则依据：rule candidate") {
 		t.Fatalf("expected enhanced candidate reason, got %s", rendered)
 	}
 }
@@ -238,10 +238,10 @@ func TestRenderMarketPoolMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderMarketPool() error = %v", err)
 	}
-	if !strings.Contains(rendered, "# Stable Market Pool") {
+	if !strings.Contains(rendered, "# 稳定候选池") {
 		t.Fatalf("expected market pool heading, got %s", rendered)
 	}
-	if !strings.Contains(rendered, "| 1 | A股宽基 | 易方达中证A500ETF联接A | 8 | 12.00% | 21.00% | 9.00% | 32.0亿 | yes | 250日收益 21.00%；指数工具更稳定 |") {
+	if !strings.Contains(rendered, "| 1 | A股宽基 | 易方达中证A500ETF联接A | 8 | 12.00% | 21.00% | 9.00% | 32.0亿 | 是 | 250日收益 21.00%；指数工具更稳定 |") {
 		t.Fatalf("expected market pool row, got %s", rendered)
 	}
 }

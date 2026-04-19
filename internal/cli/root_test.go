@@ -169,7 +169,7 @@ func TestDCAPlanCommandRendersWithoutFetchedData(t *testing.T) {
 	if err := runner.Execute(); err != nil {
 		t.Fatalf("dca-plan Execute() error = %v, stderr=%s", err, stderr.String())
 	}
-	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("DCA Plan")) {
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("定投计划")) {
 		t.Fatalf("expected dca plan output, got %s", got)
 	}
 }
@@ -769,7 +769,7 @@ func TestDocsPublishIncludesMarketPoolLinksInNavigation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReadFile(%s) error = %v", rel, err)
 		}
-		if rel == "latest/market-pool.md" && !bytes.Contains(buf, []byte("Stable Market Pool")) {
+		if rel == "latest/market-pool.md" && !bytes.Contains(buf, []byte("稳定候选池")) {
 			t.Fatalf("expected market pool page content, got %s", string(buf))
 		}
 		if rel != "latest/market-pool.md" && !bytes.Contains(buf, []byte("market-pool.md")) {
@@ -780,10 +780,10 @@ func TestDocsPublishIncludesMarketPoolLinksInNavigation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(README.md) error = %v", err)
 	}
-	if !bytes.Contains(homepage, []byte("## Dashboard")) {
+	if !bytes.Contains(homepage, []byte("## 总览看板")) {
 		t.Fatalf("expected homepage dashboard section, got %s", string(homepage))
 	}
-	if !bytes.Contains(homepage, []byte("## Theme Snapshot")) {
+	if !bytes.Contains(homepage, []byte("## 主题快照")) {
 		t.Fatalf("expected homepage theme snapshot section, got %s", string(homepage))
 	}
 	if !bytes.Contains(homepage, []byte("A股宽基")) {

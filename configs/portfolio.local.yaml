@@ -78,8 +78,8 @@ publishing:
         archive_by_run_date: true
         overwrite_latest: true
         retain_days: 0
-        site_title: Derek Fund Advisor
-        site_description: Low-turnover, long-term holding, DCA-first portfolio reports
+        site_title: Derek 基金投资顾问
+        site_description: 低换手、长期持有、定投优先的基金组合跟踪报告
         strategy_overview_path: strategy/overview.md
         risk_disclosure_path: about/risk.md
         visibility: public

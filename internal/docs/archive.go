@@ -152,9 +152,9 @@ func buildArchiveRootIndex(archiveRoot string) error {
 	if err != nil {
 		return err
 	}
-	lines := []string{"# Archive", "", "Historical report snapshots grouped by date.", ""}
+	lines := []string{"# 历史归档", "", "按日期整理的历史报告快照。", ""}
 	for _, year := range years {
-		lines = append(lines, fmt.Sprintf("- [%s](%s/README.md)", year, filepath.ToSlash(year)))
+		lines = append(lines, fmt.Sprintf("- [%s 年](%s/README.md)", year, filepath.ToSlash(year)))
 	}
 	return writeDoc(filepath.Join(archiveRoot, readmeName), strings.Join(lines, "\n")+"\n")
 }
@@ -165,13 +165,13 @@ func buildYearIndex(root, yearRoot, year string) error {
 		return err
 	}
 	lines := []string{
-		fmt.Sprintf("# %s Archive", year),
+		fmt.Sprintf("# %s 年归档", year),
 		"",
-		fmt.Sprintf("- [Back to archive](%s)", relativeFrom(yearRoot, filepath.Join(root, archiveDirName, readmeName))),
+		fmt.Sprintf("- [返回历史归档](%s)", relativeFrom(yearRoot, filepath.Join(root, archiveDirName, readmeName))),
 		"",
 	}
 	for _, month := range months {
-		lines = append(lines, fmt.Sprintf("- [%s-%s](%s/README.md)", year, month, filepath.ToSlash(month)))
+		lines = append(lines, fmt.Sprintf("- [%s 年 %s 月](%s/README.md)", year, month, filepath.ToSlash(month)))
 	}
 	return writeDoc(filepath.Join(yearRoot, readmeName), strings.Join(lines, "\n")+"\n")
 }
@@ -182,9 +182,9 @@ func buildMonthIndex(root, monthRoot, year, month string) error {
 		return err
 	}
 	lines := []string{
-		fmt.Sprintf("# %s-%s Archive", year, month),
+		fmt.Sprintf("# %s 年 %s 月归档", year, month),
 		"",
-		fmt.Sprintf("- [Back to %s](%s)", year, relativeFrom(monthRoot, filepath.Join(filepath.Dir(monthRoot), readmeName))),
+		fmt.Sprintf("- [返回 %s 年](%s)", year, relativeFrom(monthRoot, filepath.Join(filepath.Dir(monthRoot), readmeName))),
 		"",
 	}
 	for _, day := range days {
@@ -199,23 +199,36 @@ func buildDayIndex(dayRoot, year, month, day string) error {
 		return err
 	}
 	lines := []string{
-		fmt.Sprintf("# %s-%s-%s Snapshot", year, month, day),
+		fmt.Sprintf("# %s-%s-%s 快照", year, month, day),
 		"",
-		fmt.Sprintf("- [Back to %s-%s](%s)", year, month, relativeFrom(dayRoot, filepath.Join(filepath.Dir(dayRoot), readmeName))),
+		fmt.Sprintf("- [返回 %s 年 %s 月](%s)", year, month, relativeFrom(dayRoot, filepath.Join(filepath.Dir(dayRoot), readmeName))),
 		"",
-		"## Reports",
+		"## 报告列表",
 		"",
 	}
 	for _, entry := range entries {
 		if entry.IsDir() || entry.Name() == readmeName || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
 		}
-		label := strings.TrimSuffix(entry.Name(), ".md")
-		label = strings.ReplaceAll(label, "-", " ")
-		label = strings.Title(label)
+		label := archiveEntryLabel(strings.TrimSuffix(entry.Name(), ".md"))
 		lines = append(lines, fmt.Sprintf("- [%s](%s)", label, filepath.ToSlash(entry.Name())))
 	}
 	return writeDoc(filepath.Join(dayRoot, readmeName), strings.Join(lines, "\n")+"\n")
+}
+
+func archiveEntryLabel(slug string) string {
+	switch slug {
+	case "daily":
+		return "日报"
+	case "dca-plan":
+		return "定投计划"
+	case "market-pool":
+		return "稳定候选池"
+	case "backtest":
+		return "策略回测"
+	default:
+		return strings.ReplaceAll(slug, "-", " ")
+	}
 }
 
 func childDirs(root string) ([]string, error) {

@@ -35,13 +35,13 @@ func exportReports(cfg *config.Config, input PublishInput) (*ExportResult, error
 		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
 			return nil, err
 		}
-		result.Latest["daily"] = ReportArtifact{Label: "Daily Playbook", Path: latestRel}
+		result.Latest["daily"] = ReportArtifact{Label: "每日报告", Path: latestRel}
 		if cfg.Publishing.GitBook.ArchiveByRunDate {
 			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "daily")
 			if err := writeDoc(archiveAbs, rendered); err != nil {
 				return nil, err
 			}
-			result.Archive["daily"] = ReportArtifact{Label: "Archived Daily Playbook", Path: relativeDocPath(root, archiveAbs)}
+			result.Archive["daily"] = ReportArtifact{Label: "归档每日报告", Path: relativeDocPath(root, archiveAbs)}
 		}
 	}
 	if cfg.Publishing.GitBook.IncludeDCAPlan && input.Plan != nil {
@@ -54,13 +54,13 @@ func exportReports(cfg *config.Config, input PublishInput) (*ExportResult, error
 		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
 			return nil, err
 		}
-		result.Latest["dca-plan"] = ReportArtifact{Label: "Monthly DCA Plan", Path: latestRel}
+		result.Latest["dca-plan"] = ReportArtifact{Label: "月度定投计划", Path: latestRel}
 		if cfg.Publishing.GitBook.ArchiveByRunDate {
 			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "dca-plan")
 			if err := writeDoc(archiveAbs, rendered); err != nil {
 				return nil, err
 			}
-			result.Archive["dca-plan"] = ReportArtifact{Label: "Archived DCA Plan", Path: relativeDocPath(root, archiveAbs)}
+			result.Archive["dca-plan"] = ReportArtifact{Label: "归档定投计划", Path: relativeDocPath(root, archiveAbs)}
 		}
 	}
 	if input.MarketPool != nil {
@@ -73,13 +73,13 @@ func exportReports(cfg *config.Config, input PublishInput) (*ExportResult, error
 		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
 			return nil, err
 		}
-		result.Latest["market-pool"] = ReportArtifact{Label: "Stable Market Pool", Path: latestRel}
+		result.Latest["market-pool"] = ReportArtifact{Label: "稳定候选池", Path: latestRel}
 		if cfg.Publishing.GitBook.ArchiveByRunDate {
 			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "market-pool")
 			if err := writeDoc(archiveAbs, rendered); err != nil {
 				return nil, err
 			}
-			result.Archive["market-pool"] = ReportArtifact{Label: "Archived Stable Market Pool", Path: relativeDocPath(root, archiveAbs)}
+			result.Archive["market-pool"] = ReportArtifact{Label: "归档候选池", Path: relativeDocPath(root, archiveAbs)}
 		}
 	}
 	if cfg.Publishing.GitBook.IncludeBacktest {
@@ -103,13 +103,13 @@ func exportReports(cfg *config.Config, input PublishInput) (*ExportResult, error
 			if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
 				return nil, err
 			}
-			result.Latest["backtest"] = ReportArtifact{Label: "Strategy Backtest", Path: latestRel}
+			result.Latest["backtest"] = ReportArtifact{Label: "策略回测", Path: latestRel}
 			if cfg.Publishing.GitBook.ArchiveByRunDate {
 				archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "backtest")
 				if err := writeDoc(archiveAbs, rendered); err != nil {
 					return nil, err
 				}
-				result.Archive["backtest"] = ReportArtifact{Label: "Archived Strategy Backtest", Path: relativeDocPath(root, archiveAbs)}
+				result.Archive["backtest"] = ReportArtifact{Label: "归档策略回测", Path: relativeDocPath(root, archiveAbs)}
 			}
 		}
 	}
@@ -125,9 +125,9 @@ func renderBacktestPage(input PublishInput) (string, error) {
 	}
 	reason := input.BacktestError
 	if reason == "" {
-		reason = "Backtest data is currently unavailable."
+		reason = "历史回测数据暂不可用。"
 	}
-	return fmt.Sprintf("# Backtest\n\n- Status: unavailable\n- Note: %s\n", reason), nil
+	return fmt.Sprintf("# 策略回测\n\n- 状态：不可用\n- 说明：%s\n", reason), nil
 }
 
 func writeState(root string, result *ExportResult, runDate time.Time) error {
