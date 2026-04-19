@@ -1,6 +1,6 @@
-# Risk Disclosure
+# 风险提示
 
-- This material is for process tracking and portfolio review only.
-- It is not investment advice and does not guarantee returns.
-- Market data and fund NAV updates may be delayed or incomplete.
-- Rule-based outputs can be wrong and should be reviewed before execution.
+- 内容仅用于流程跟踪和组合复盘。
+- 不构成投资建议，也不保证收益。
+- 市场数据和基金净值可能存在延迟或缺失。
+- 规则模型可能出错，执行前仍需人工复核。

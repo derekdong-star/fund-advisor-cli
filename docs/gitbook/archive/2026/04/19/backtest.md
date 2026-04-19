@@ -1,26 +1,26 @@
-# dhw-fund-portfolio Backtest
+# dhw-fund-portfolio 策略回测
 
-- Range: `2025-10-19` -> `2026-04-15`
-- Trading Days: `120`
-- Rebalance Every: `20`
-- Rebalance Count: `5`
-- Trade Count: `0`
+- 区间：`2025-10-19` -> `2026-04-15`
+- 交易日：`120`
+- 调仓间隔：`20`
+- 调仓次数：`5`
+- 交易次数：`0`
 
-| Metric | Value |
+| 指标 | 数值 |
 | --- | ---: |
-| Initial Value | 262100.00 |
-| Final Value | 294514.67 |
-| Benchmark Final | 294514.67 |
-| Total Return | 12.37% |
-| Benchmark Return | 12.37% |
-| Excess Return | 0.00% |
-| Annualized Return | 27.74% |
-| Benchmark Annualized | 27.74% |
-| Max Drawdown | 7.58% |
-| Benchmark Max Drawdown | 7.58% |
-| Final Cash | 0.00 |
+| 初始市值 | 262100.00 |
+| 最终市值 | 294514.67 |
+| 基准最终市值 | 294514.67 |
+| 总收益率 | 12.37% |
+| 基准收益率 | 12.37% |
+| 超额收益 | 0.00% |
+| 年化收益率 | 27.74% |
+| 基准年化收益率 | 27.74% |
+| 最大回撤 | 7.58% |
+| 基准最大回撤 | 7.58% |
+| 期末现金 | 0.00 |
 
-## Notes
+## 备注
 
 - 回测按固定周期重跑当前规则，不含申赎费、滑点、税费
 - 基准为初始持仓按买入并持有计算

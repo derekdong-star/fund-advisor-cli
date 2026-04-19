@@ -1,5 +1,5 @@
-# Archive
+# 历史归档
 
-Historical report snapshots grouped by date.
+按日期整理的历史报告快照。
 
-- [2026](2026/README.md)
+- [2026 年](2026/README.md)

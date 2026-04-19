@@ -1,5 +1,5 @@
-# 2026 Archive
+# 2026 年归档
 
-- [Back to archive](../README.md)
+- [返回历史归档](../README.md)
 
-- [2026-04](04/README.md)
+- [2026 年 04 月](04/README.md)

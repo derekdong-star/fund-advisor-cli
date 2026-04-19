@@ -1,6 +1,6 @@
-# Strategy Overview
+# 策略说明
 
-- Low turnover: avoid frequent swaps and routine trimming.
-- Long-term holding: keep conviction holdings through normal noise.
-- DCA-first: new capital is allocated through a constrained monthly DCA plan.
-- Protected holding: `000979 景顺长城沪港深精选股票A` remains a long-term conviction position.
+- 低换手：避免频繁调仓和日常性减仓。
+- 长期持有：对高确信度持仓，在正常波动中保持耐心。
+- 定投优先：新增资金优先通过受约束的月度定投计划投入。
+- 重点持仓：`000979 景顺长城沪港深精选股票A` 继续视为长期高确信度仓位。

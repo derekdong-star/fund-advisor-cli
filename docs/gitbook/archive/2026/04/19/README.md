@@ -1,10 +1,10 @@
-# 2026-04-19 Snapshot
+# 2026-04-19 快照
 
-- [Back to 2026-04](../README.md)
+- [返回 2026 年 04 月](../README.md)
 
-## Reports
+## 报告列表
 
-- [Backtest](backtest.md)
-- [Daily](daily.md)
-- [Dca Plan](dca-plan.md)
-- [Market Pool](market-pool.md)
+- [策略回测](backtest.md)
+- [日报](daily.md)
+- [定投计划](dca-plan.md)
+- [稳定候选池](market-pool.md)

@@ -1,54 +1,54 @@
-# Derek Fund Advisor
+# Derek 基金投资顾问
 
-Low-turnover, long-term holding, DCA-first portfolio reports
+低换手、长期持有、定投优先的基金组合跟踪报告
 
-## How To Read
+## 如何阅读
 
-- Start with the latest daily playbook for current portfolio actions.
-- Use the monthly DCA plan for fresh capital allocation.
-- Use the stable market pool as a low-churn candidate list, not a daily trading list.
-- Review the strategy backtest as a validation page, not a prediction tool.
+- 先看最新日报，了解当前组合动作。
+- 再看月度定投计划，安排新增资金。
+- 稳定候选池用于补充观察名单，不用于高频切换。
+- 回测页只用于验证规则稳定性，不代表未来收益。
 
-## Dashboard
+## 总览看板
 
-| Daily | DCA | Market Pool |
+| 日报 | 定投 | 候选池 |
 | --- | --- | --- |
-| Hold 4 / Pause 4 / Adjust 2 | Planned 5000 / 2 funds | 0 candidates / retained 0 |
-| [Daily Playbook](latest/daily.md) | [Monthly DCA Plan](latest/dca-plan.md) | [Stable Market Pool](latest/market-pool.md) |
-| 2 recommendations across 10 signals | Top allocation: 易方达中证红利ETF联接发起式C 2500 | No stable candidate snapshot |
+| 持有 4 / 暂停 4 / 调整 2 | 计划 5000 元 / 2 只基金 | 0 只候选 / 保留 0 只 |
+| [每日报告](latest/daily.md) | [月度定投计划](latest/dca-plan.md) | [稳定候选池](latest/market-pool.md) |
+| 2 条建议，覆盖 10 个信号 | 优先定投：易方达中证红利ETF联接发起式C 2500 元 | 暂无稳定候选快照 |
 
-## Latest Snapshot
+## 最新快照
 
-- Run Date: `2026-04-19`
-- Portfolio Value: `262100.00`
-- Weighted Day Change: `1.14%`
-- Monthly DCA Planned: `5000`
-- Stable Candidate Count: `0`
-- Retained Candidates: `0`
+- 运行日期：`2026-04-19`
+- 组合市值：`262100.00`
+- 当日加权涨跌：`1.14%`
+- 本月计划定投：`5000`
+- 稳定候选数：`0`
+- 保留候选数：`0`
 
-## Quick Links
+## 快速入口
 
-- [Daily Playbook](latest/daily.md)
-- [Monthly DCA Plan](latest/dca-plan.md)
-- [Stable Market Pool](latest/market-pool.md)
-- [Strategy Backtest](latest/backtest.md)
+- [每日报告](latest/daily.md)
+- [月度定投计划](latest/dca-plan.md)
+- [稳定候选池](latest/market-pool.md)
+- [策略回测](latest/backtest.md)
 
-## Archive
+## 历史归档
 
-- [Browse Archive](archive/README.md)
-- [Latest Snapshot Folder](archive/2026/04/19/README.md)
-- [Latest Archived Daily](archive/2026/04/19/daily.md)
-- [Latest Archived Market Pool](archive/2026/04/19/market-pool.md)
-- [Latest Archived DCA Plan](archive/2026/04/19/dca-plan.md)
-- [Latest Archived Backtest](archive/2026/04/19/backtest.md)
+- [浏览归档](archive/README.md)
+- [最新归档目录](archive/2026/04/19/README.md)
+- [最新归档日报](archive/2026/04/19/daily.md)
+- [最新归档稳定候选池](archive/2026/04/19/market-pool.md)
+- [最新归档定投计划](archive/2026/04/19/dca-plan.md)
+- [最新归档策略回测](archive/2026/04/19/backtest.md)
 
-## Methodology
+## 方法说明
 
-- [Strategy Overview](strategy/overview.md)
-- [Risk Disclosure](about/risk.md)
+- [策略说明](strategy/overview.md)
+- [风险提示](about/risk.md)
 
-## Publishing Note
+## 发布说明
 
-- Generated automatically from the portfolio rule engine.
-- Market data and fund NAV updates may be delayed or incomplete.
-- This material is for tracking and review only, not investment advice.
+- 页面由组合规则引擎自动生成。
+- 市场数据和基金净值可能存在延迟或缺失。
+- 内容仅用于跟踪与复盘，不构成投资建议。
