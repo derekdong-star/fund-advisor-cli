@@ -50,6 +50,7 @@ jobs:
             git worktree add --detach "${PUBLISH_WORKTREE}"
             cd "${PUBLISH_WORKTREE}"
             git switch --orphan "${PUBLISH_BRANCH}"
+            git rm -rf --cached . || true
             find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           fi
 

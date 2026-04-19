@@ -109,7 +109,7 @@ Recommended publish flow:
 4. In GitBook, connect Git Sync to branch `gitbook-publish` and set the content root to `docs/gitbook`.
 5. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.
 
-The repository includes a runnable workflow at `.github/workflows/publish-gitbook.yml`.
+The repository includes a runnable workflow at `.github/workflows/publish-gitbook.yml`. On the first run it creates `gitbook-publish` as a docs-only orphan branch, then syncs only `docs/gitbook` into that branch.
 
 It runs on manual trigger or at `09:05` Asia/Shanghai time from Monday to Friday, publishes with `--refresh`, and only pushes updated GitBook artifacts to `gitbook-publish` when the generated content changed.
 
