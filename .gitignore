@@ -4,3 +4,4 @@ data/*.db
 data/*.json
 data/*.db-shm
 data/*.db-wal
+tmp/

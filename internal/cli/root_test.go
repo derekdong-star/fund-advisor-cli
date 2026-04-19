@@ -200,6 +200,52 @@ func TestDocsPublishCommandSupportsRefreshFlag(t *testing.T) {
 	}
 }
 
+func TestDocsPublishLocalPreviewConfigWritesToTmpDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.local.yaml")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	runner := NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	buf, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	updated := bytes.ReplaceAll(buf, []byte("../docs/gitbook"), []byte("../tmp/gitbook-local"))
+	updated = bytes.ReplaceAll(updated, []byte("docs/gitbook"), []byte("tmp/gitbook-local"))
+	if err := os.WriteFile(configPath, updated, 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"docs", "publish", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("docs publish Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	docsRoot := filepath.Join(dir, "tmp", "gitbook-local")
+	for _, rel := range []string{"README.md", "SUMMARY.md", "latest/daily.md", "latest/dca-plan.md"} {
+		if _, err := os.Stat(filepath.Join(docsRoot, rel)); err != nil {
+			t.Fatalf("expected generated local preview file %s: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "docs", "gitbook")); !os.IsNotExist(err) {
+		t.Fatalf("expected tracked docs path to stay untouched, stat err=%v", err)
+	}
+}
+
 func TestDocsPublishCommandGeneratesGitBookTree(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

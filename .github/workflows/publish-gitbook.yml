@@ -12,6 +12,10 @@ concurrency:
   group: publish-gitbook
   cancel-in-progress: false
 
+env:
+  PUBLISH_BRANCH: gitbook-publish
+  PUBLISH_WORKTREE: /tmp/fundcli-gitbook-publish
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -36,8 +40,24 @@ jobs:
       - name: Show generated docs status
         run: git status --short docs/gitbook
 
-      - name: Commit generated docs
+      - name: Prepare publish worktree
         run: |
+          git fetch origin "${PUBLISH_BRANCH}" || true
+          rm -rf "${PUBLISH_WORKTREE}"
+          if git show-ref --verify --quiet "refs/remotes/origin/${PUBLISH_BRANCH}"; then
+            git worktree add -B "${PUBLISH_BRANCH}" "${PUBLISH_WORKTREE}" "origin/${PUBLISH_BRANCH}"
+          else
+            git worktree add --detach "${PUBLISH_WORKTREE}"
+            cd "${PUBLISH_WORKTREE}"
+            git switch --orphan "${PUBLISH_BRANCH}"
+            find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          fi
+
+      - name: Sync docs to publish branch
+        run: |
+          mkdir -p "${PUBLISH_WORKTREE}/docs"
+          rsync -a --delete docs/gitbook/ "${PUBLISH_WORKTREE}/docs/gitbook/"
+          cd "${PUBLISH_WORKTREE}"
           git add -A docs/gitbook
           if git diff --cached --quiet; then
             echo "No docs changes to commit."
@@ -46,4 +66,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Update GitBook docs and market pool snapshot"
-          git push
+          git push origin HEAD:"${PUBLISH_BRANCH}"
+
+      - name: Clean up worktree
+        if: always()
+        run: |
+          git worktree remove "${PUBLISH_WORKTREE}" --force || true

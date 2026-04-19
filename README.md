@@ -27,6 +27,7 @@ go run ./cmd/fundcli dca-plan --config ./configs/portfolio.yaml --format markdow
 go run ./cmd/fundcli market-pool --config ./configs/portfolio.yaml --format markdown --output ./reports/market-pool.md
 go run ./cmd/fundcli run --config ./configs/portfolio.yaml --format markdown --output ./reports/daily.md
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml
+go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 180
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180
 go run ./cmd/fundcli backtest --config ./configs/portfolio.yaml --days 120 --rebalance-every 20
 ```
@@ -34,6 +35,8 @@ go run ./cmd/fundcli backtest --config ./configs/portfolio.yaml --days 120 --reb
 ## Config
 
 The example portfolio is at [configs/portfolio.example.yaml](/Users/dhw/Documents/derekdong-star/fund-advisor-cli/configs/portfolio.example.yaml).
+
+Use [configs/portfolio.local.yaml](/Users/dhw/Documents/derekdong-star/fund-advisor-cli/configs/portfolio.local.yaml) for local GitBook preview runs. It writes generated docs to `tmp/gitbook-local`, which is ignored by git and avoids conflicts with tracked publish artifacts.
 
 Key fields:
 
@@ -75,7 +78,6 @@ When multiple weak holdings compete for the same candidate, the recommendation e
 - QDII and ETF feeder funds can have delayed NAV updates.
 - The first fetch infers estimated units from `account_value / latest_nav`.
 
-
 ## Backtest
 
 `backtest` replays the current rule set on overlapping historical trading days from the local SQLite snapshot store. It compares the strategy against a simple buy-and-hold benchmark built from the starting portfolio weights, only uses cash raised by prior sells, and currently ignores fees, slippage, and taxes.
@@ -101,13 +103,14 @@ The intended workflow is to point GitBook Git Sync at the configured `project_di
 
 Recommended publish flow:
 
-1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180` in CI or before pushing docs changes. This refresh also rebuilds the stable market pool so GitBook stays in sync with the latest broader-market candidates.
-2. Commit the generated `docs/gitbook/` tree to the same repository that GitBook is syncing.
-3. In GitBook, connect Git Sync to this repository and set the content root to `docs/gitbook`.
-4. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.
+1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 180` for local preview. This writes to `tmp/gitbook-local/` so local checks do not modify tracked GitBook files.
+2. Let GitHub Actions run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180` for the real publish output under `docs/gitbook/`.
+3. The workflow syncs that generated `docs/gitbook/` tree to the `gitbook-publish` branch instead of committing it back to `main`.
+4. In GitBook, connect Git Sync to branch `gitbook-publish` and set the content root to `docs/gitbook`.
+5. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.
 
-The repository now includes a runnable workflow at `.github/workflows/publish-gitbook.yml`.
+The repository includes a runnable workflow at `.github/workflows/publish-gitbook.yml`.
 
-It runs on manual trigger or at `09:05` Asia/Shanghai time from Monday to Friday, publishes with `--refresh`, then commits `docs/gitbook/` only when the generated content changed.
+It runs on manual trigger or at `09:05` Asia/Shanghai time from Monday to Friday, publishes with `--refresh`, and only pushes updated GitBook artifacts to `gitbook-publish` when the generated content changed.
 
 If you set `publishing.gitbook.retain_days`, old archive day folders older than that rolling window are pruned during `docs publish`. `0` keeps the full archive.
