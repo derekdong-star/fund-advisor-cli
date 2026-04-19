@@ -65,7 +65,7 @@ func RenderMarketPool(pool model.MarketPoolReport, format string) (string, error
 func RenderTable(report model.AnalysisReport) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "组合：%s\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "运行时间：%s\n", report.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "运行时间：%s\n", formatDisplayTime(report.Summary.RunDate))
 	fmt.Fprintf(&buf, "组合市值：%.2f\n", report.Summary.PortfolioValue)
 	fmt.Fprintf(&buf, "当日加权涨跌：%.2f%%\n\n", report.Summary.WeightedDayChangePct*100)
 
@@ -160,7 +160,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 	executionPlan := buildDisplayExecutionPlan(displayRecommendations)
 
 	fmt.Fprintf(&buf, "# %s 投资行动手册\n\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", report.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", formatDisplayTime(report.Summary.RunDate))
 	fmt.Fprintf(&buf, "- 组合市值：`%.2f`\n", report.Summary.PortfolioValue)
 	fmt.Fprintf(&buf, "- 当日加权涨跌：`%.2f%%`\n", report.Summary.WeightedDayChangePct*100)
 	if len(report.Summary.Notes) > 0 {
@@ -501,7 +501,7 @@ func displayOrDash(value string) string {
 func renderDCAPlanTable(plan model.DCAPlanReport) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "定投计划：%s\n", plan.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "计划日期：%s\n", plan.Summary.PlanDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "计划日期：%s\n", formatDisplayTime(plan.Summary.PlanDate))
 	fmt.Fprintf(&buf, "频率：%s\n", displayDCAFrequency(plan.Summary.Frequency))
 	fmt.Fprintf(&buf, "预算：%.0f\n", plan.Summary.Budget)
 	fmt.Fprintf(&buf, "已计划：%.0f\n", plan.Summary.PlannedAmount)
@@ -551,7 +551,7 @@ func renderDCAPlanTable(plan model.DCAPlanReport) string {
 func renderDCAPlanMarkdown(plan model.DCAPlanReport) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "# %s 定投计划\n\n", plan.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "- 计划日期：`%s`\n", plan.Summary.PlanDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- 计划日期：`%s`\n", formatDisplayTime(plan.Summary.PlanDate))
 	fmt.Fprintf(&buf, "- 频率：`%s`\n", displayDCAFrequency(plan.Summary.Frequency))
 	fmt.Fprintf(&buf, "- 预算：`%.0f`\n", plan.Summary.Budget)
 	fmt.Fprintf(&buf, "- 已计划：`%.0f`\n", plan.Summary.PlannedAmount)
@@ -724,7 +724,7 @@ func renderBacktestMarkdown(report model.BacktestReport) string {
 
 func renderMarketPoolTable(pool model.MarketPoolReport) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "候选池运行时间：%s\n", pool.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "候选池运行时间：%s\n", formatDisplayTime(pool.Summary.RunDate))
 	fmt.Fprintf(&buf, "全市场基金数：%d\n", pool.Summary.UniverseCount)
 	fmt.Fprintf(&buf, "主题匹配数：%d\n", pool.Summary.MatchedCount)
 	fmt.Fprintf(&buf, "满足阈值数：%d\n", pool.Summary.EligibleCount)
@@ -764,7 +764,7 @@ func renderMarketPoolTable(pool model.MarketPoolReport) string {
 func renderMarketPoolMarkdown(pool model.MarketPoolReport) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "# 稳定候选池\n\n")
-	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", pool.Summary.RunDate.Format(time.RFC3339))
+	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", formatDisplayTime(pool.Summary.RunDate))
 	fmt.Fprintf(&buf, "- 全市场基金数：`%d`\n", pool.Summary.UniverseCount)
 	fmt.Fprintf(&buf, "- 主题匹配数：`%d`\n", pool.Summary.MatchedCount)
 	fmt.Fprintf(&buf, "- 满足阈值数：`%d`\n", pool.Summary.EligibleCount)
@@ -798,6 +798,15 @@ func renderMarketPoolMarkdown(pool model.MarketPoolReport) string {
 		)
 	}
 	return buf.String()
+}
+
+var chinaTimezone = time.FixedZone("UTC+8", 8*3600)
+
+func formatDisplayTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.In(chinaTimezone).Format(time.RFC3339)
 }
 
 func yesNo(value bool) string {
