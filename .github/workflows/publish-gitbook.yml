@@ -3,7 +3,8 @@ name: publish-gitbook
 on:
   workflow_dispatch:
   schedule:
-    - cron: '5 1 * * 1-5'
+    # 06:00 UTC = 14:00 Asia/Shanghai on weekdays.
+    - cron: '0 6 * * 1-5'
 
 permissions:
   contents: write
@@ -33,6 +34,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Show trigger time in Asia/Shanghai
+        run: TZ=Asia/Shanghai date '+triggered at %Y-%m-%d %H:%M:%S %Z'
 
       - name: Publish GitBook docs
         run: go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180

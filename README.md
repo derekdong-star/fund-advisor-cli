@@ -111,6 +111,6 @@ Recommended publish flow:
 
 The repository includes a runnable workflow at `.github/workflows/publish-gitbook.yml`. On the first run it creates `gitbook-publish` as a docs-only orphan branch, then syncs only `docs/gitbook` into that branch.
 
-It runs on manual trigger or at `09:05` Asia/Shanghai time from Monday to Friday, publishes with `--refresh`, and only pushes updated GitBook artifacts to `gitbook-publish` when the generated content changed.
+It runs on manual trigger or at `14:00` Asia/Shanghai time on weekdays, intended to generate the same-day decision report after the trading session has enough same-day context. The workflow still publishes with `--refresh`, logs the Asia/Shanghai trigger time, and only pushes updated GitBook artifacts to `gitbook-publish` when the generated content changed.
 
 If you set `publishing.gitbook.retain_days`, old archive day folders older than that rolling window are pruned during `docs publish`. `0` keeps the full archive.
