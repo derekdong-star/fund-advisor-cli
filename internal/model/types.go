@@ -55,18 +55,24 @@ type Candidate struct {
 }
 
 type PositionState struct {
-	Position      Position       `json:"position"`
-	Latest        *FundSnapshot  `json:"latest"`
-	History       []FundSnapshot `json:"history"`
-	CurrentValue  float64        `json:"current_value"`
-	CurrentWeight float64        `json:"current_weight"`
-	Return20D     float64        `json:"return_20d"`
-	Return60D     float64        `json:"return_60d"`
-	Return120D    float64        `json:"return_120d"`
-	Reasons       []string       `json:"reasons,omitempty"`
-	Action        Action         `json:"action"`
-	HealthScore   int            `json:"health_score"`
-	Drift         float64        `json:"drift"`
+	Position          Position       `json:"position"`
+	Latest            *FundSnapshot  `json:"latest"`
+	History           []FundSnapshot `json:"history"`
+	CurrentValue      float64        `json:"current_value"`
+	CurrentWeight     float64        `json:"current_weight"`
+	Return20D         float64        `json:"return_20d"`
+	Return60D         float64        `json:"return_60d"`
+	Return120D        float64        `json:"return_120d"`
+	HoldingCost       float64        `json:"holding_cost,omitempty"`
+	UnrealizedPnL     float64        `json:"unrealized_pnl,omitempty"`
+	UnrealizedPnLPct  float64        `json:"unrealized_pnl_pct,omitempty"`
+	LastLedgerTradeAt time.Time      `json:"last_ledger_trade_at,omitempty"`
+	LedgerTradeCount  int            `json:"ledger_trade_count,omitempty"`
+	LedgerApplied     bool           `json:"ledger_applied,omitempty"`
+	Reasons           []string       `json:"reasons,omitempty"`
+	Action            Action         `json:"action"`
+	HealthScore       int            `json:"health_score"`
+	Drift             float64        `json:"drift"`
 }
 
 type CandidateState struct {

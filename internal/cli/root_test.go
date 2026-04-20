@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,6 +172,147 @@ func TestDCAPlanCommandRendersWithoutFetchedData(t *testing.T) {
 	}
 	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("定投计划")) {
 		t.Fatalf("expected dca plan output, got %s", got)
+	}
+}
+
+func TestLedgerCommandsAreRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	ledgerInitCmd, _, err := cmd.Find([]string{"ledger", "init"})
+	if err != nil {
+		t.Fatalf("Find(ledger init) error = %v", err)
+	}
+	if ledgerInitCmd == nil {
+		t.Fatalf("expected ledger init command")
+	}
+	ledgerCheckCmd, _, err := cmd.Find([]string{"ledger", "check"})
+	if err != nil {
+		t.Fatalf("Find(ledger check) error = %v", err)
+	}
+	if ledgerCheckCmd == nil {
+		t.Fatalf("expected ledger check command")
+	}
+	ledgerAddTradeCmd, _, err := cmd.Find([]string{"ledger", "add-trade"})
+	if err != nil {
+		t.Fatalf("Find(ledger add-trade) error = %v", err)
+	}
+	if ledgerAddTradeCmd == nil {
+		t.Fatalf("expected ledger add-trade command")
+	}
+	positionsCmd, _, err := cmd.Find([]string{"positions", "reconcile"})
+	if err != nil {
+		t.Fatalf("Find(positions reconcile) error = %v", err)
+	}
+	if positionsCmd == nil {
+		t.Fatalf("expected positions reconcile command")
+	}
+}
+
+func TestLedgerInitAndReconcileFlow(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	runner := NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"ledger", "init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("ledger init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	dataDir := filepath.Join(dir, "data")
+	snapshotPath := filepath.Join(dataDir, "holdings_snapshot.yaml")
+	tradesPath := filepath.Join(dataDir, "trades.csv")
+	if _, err := os.Stat(snapshotPath); err != nil {
+		t.Fatalf("snapshot file missing: %v", err)
+	}
+	if _, err := os.Stat(tradesPath); err != nil {
+		t.Fatalf("trades file missing: %v", err)
+	}
+
+	snapshot := []byte(`as_of: 2026-04-20
+positions:
+  - fund_code: "000979"
+    fund_name: "景顺长城沪港深精选股票A"
+    units: 100
+    total_cost: 1000
+`)
+	if err := os.WriteFile(snapshotPath, snapshot, 0o644); err != nil {
+		t.Fatalf("WriteFile(snapshot) error = %v", err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"ledger", "add-trade", "--config", configPath, "--fund-code", "000979", "--side", "BUY", "--amount", "220", "--nav", "2.0", "--units", "110", "--date", "2026-04-21", "--note", "追加"})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("ledger add-trade Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("ledger trade added")) {
+		t.Fatalf("expected add-trade output, got %s", got)
+	}
+	tradeBuf, err := os.ReadFile(tradesPath)
+	if err != nil {
+		t.Fatalf("ReadFile(trades) error = %v", err)
+	}
+	if !bytes.Contains(tradeBuf, []byte("2026-04-21,000979,BUY,220.00,2.0000,110.0000,0.00,追加")) {
+		t.Fatalf("expected trade csv row, got %s", string(tradeBuf))
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"ledger", "check", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("ledger check Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("ledger check ok")) {
+		t.Fatalf("expected ledger check output, got %s", got)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"positions", "reconcile", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("positions reconcile Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("positions reconciled")) {
+		t.Fatalf("expected reconcile output, got %s", got)
+	}
+	if !bytes.Contains([]byte(stdout.String()), []byte("000979 units=210.0000")) {
+		t.Fatalf("expected reconciled units in output, got %s", stdout.String())
+	}
+
+	svc, err := service.New(configPath)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
+	defer svc.Close()
+	analysis, err := svc.CurrentReport()
+	if err != nil {
+		t.Fatalf("CurrentReport() error = %v", err)
+	}
+	if !strings.Contains(strings.Join(analysis.Summary.Notes, "\n"), "真实仓位已由 holdings_snapshot.yaml 与 trades.csv 重建") {
+		t.Fatalf("expected analysis notes to mention ledger reconciliation, got %v", analysis.Summary.Notes)
 	}
 }
 

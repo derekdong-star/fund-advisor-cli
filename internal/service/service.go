@@ -10,6 +10,7 @@ import (
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/config"
 	"github.com/derekdong-star/fund-advisor-cli/internal/fetcher"
+	"github.com/derekdong-star/fund-advisor-cli/internal/ledger"
 	"github.com/derekdong-star/fund-advisor-cli/internal/llm"
 	"github.com/derekdong-star/fund-advisor-cli/internal/model"
 	"github.com/derekdong-star/fund-advisor-cli/internal/report"
@@ -131,6 +132,15 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 	if err := s.SyncPositions(); err != nil {
 		return nil, err
 	}
+	reconcileResult, err := ledger.ReconcileIfPresent(s.config)
+	if err != nil {
+		return nil, err
+	}
+	if reconcileResult != nil && reconcileResult.Applied {
+		if err := s.applyReconciledHoldings(reconcileResult); err != nil {
+			return nil, err
+		}
+	}
 	positions, err := s.store.ListPositions()
 	if err != nil {
 		return nil, err
@@ -184,6 +194,10 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 		})
 	}
 	reportData := s.engine.Analyze(s.config.Portfolio.Name, states, candidates)
+	if reconcileResult != nil && reconcileResult.Applied {
+		enrichPositionStatesWithLedger(reportData.Position, reconcileResult)
+		reportData.Summary.Notes = append(reportData.Summary.Notes, reconcileResult.Note)
+	}
 	dcaPlan := s.engine.BuildDCAPlan(reportData.Summary.RunDate, s.config.Portfolio.Name, reportData.Position, reportData.Summary.PortfolioValue)
 	reportData.DCAPlan = &dcaPlan
 	if s.enhancer != nil {
@@ -203,6 +217,56 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 
 func (s *Service) LatestReport() (*model.AnalysisReport, error) {
 	return s.store.LatestAnalysis()
+}
+
+func (s *Service) ReconcileHoldings() (*ledger.ReconcileResult, error) {
+	if err := s.SyncPositions(); err != nil {
+		return nil, err
+	}
+	result, err := ledger.Reconcile(s.config)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.applyReconciledHoldings(result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *Service) applyReconciledHoldings(result *ledger.ReconcileResult) error {
+	if result == nil || !result.Applied {
+		return nil
+	}
+	for _, holding := range result.Positions {
+		if err := s.store.SetEstimatedUnits(holding.FundCode, holding.Units); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func enrichPositionStatesWithLedger(states []model.PositionState, result *ledger.ReconcileResult) {
+	if result == nil || !result.Applied {
+		return
+	}
+	byCode := make(map[string]ledger.Holding, len(result.Positions))
+	for _, holding := range result.Positions {
+		byCode[holding.FundCode] = holding
+	}
+	for idx := range states {
+		holding, ok := byCode[states[idx].Position.FundCode]
+		if !ok {
+			continue
+		}
+		states[idx].HoldingCost = holding.TotalCost
+		states[idx].LedgerTradeCount = holding.TradeCount
+		states[idx].LastLedgerTradeAt = holding.LastTradeDate
+		states[idx].LedgerApplied = true
+		states[idx].UnrealizedPnL = states[idx].CurrentValue - holding.TotalCost
+		if holding.TotalCost > 0 {
+			states[idx].UnrealizedPnLPct = states[idx].UnrealizedPnL / holding.TotalCost
+		}
+	}
 }
 
 func (s *Service) RenderCurrent(format string) (string, error) {

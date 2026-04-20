@@ -26,6 +26,17 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 			{FundName: "Hold Fund", Action: model.ActionHold, CurrentWeight: 0.10, TargetWeight: 0.10, Return20D: 0.02, Return60D: 0.04, Reason: "继续持有"},
 			{FundName: "Pause Fund", Action: model.ActionPauseBuy, CurrentWeight: 0.15, TargetWeight: 0.10, Return20D: -0.01, Return60D: -0.03, Reason: "先暂停加仓"},
 		},
+		Position: []model.PositionState{{
+			Position:          model.Position{FundName: "Hold Fund", EstimatedUnits: 123.4567},
+			CurrentValue:      15000,
+			CurrentWeight:     0.15,
+			HoldingCost:       12000,
+			UnrealizedPnL:     3000,
+			UnrealizedPnLPct:  0.25,
+			LedgerTradeCount:  2,
+			LastLedgerTradeAt: now,
+			LedgerApplied:     true,
+		}},
 		DCAPlan: &model.DCAPlanReport{
 			Summary: model.DCAPlanSummary{ReserveAmount: 1000},
 			Items: []model.DCAPlanItem{{
@@ -68,6 +79,12 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 	}
 	if strings.Contains(rendered, "## 月度定投快照") {
 		t.Fatalf("did not expect separate monthly dca snapshot, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "## 持仓快照") {
+		t.Fatalf("expected holdings snapshot section, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| Hold Fund | 15000.00 | 15.00% | 123.4567 | 12000.00 | +3000.00 | +25.00% | 2026-04-15 / 2笔 |") {
+		t.Fatalf("expected holdings snapshot row, got %s", rendered)
 	}
 	if !strings.Contains(rendered, "## 执行顺序") {
 		t.Fatalf("expected execution order section, got %s", rendered)

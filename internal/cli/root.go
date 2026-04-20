@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/config"
 	"github.com/derekdong-star/fund-advisor-cli/internal/docs"
+	"github.com/derekdong-star/fund-advisor-cli/internal/ledger"
 	"github.com/derekdong-star/fund-advisor-cli/internal/llm"
 	"github.com/derekdong-star/fund-advisor-cli/internal/model"
 	"github.com/derekdong-star/fund-advisor-cli/internal/report"
@@ -46,6 +48,8 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newReportCmd(&configPath))
 	root.AddCommand(newDCAPlanCmd(&configPath))
 	root.AddCommand(newRunCmd(&configPath))
+	root.AddCommand(newLedgerCmd(&configPath))
+	root.AddCommand(newPositionsCmd(&configPath))
 	root.AddCommand(newMarketPoolCmd(&configPath))
 	root.AddCommand(newBackfillCmd(&configPath))
 	root.AddCommand(newBacktestCmd(&configPath))
@@ -234,6 +238,149 @@ func newDCAPlanCmd(configPath *string) *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "table", "dca plan format: table|markdown|json")
 	cmd.Flags().StringVar(&output, "output", "", "write rendered dca plan to a file")
 	return cmd
+}
+
+func newLedgerCmd(configPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ledger",
+		Short: "Manage manual holdings snapshot and trade ledger files",
+	}
+	cmd.AddCommand(newLedgerInitCmd(configPath))
+	cmd.AddCommand(newLedgerCheckCmd(configPath))
+	cmd.AddCommand(newLedgerAddTradeCmd(configPath))
+	return cmd
+}
+
+func newLedgerInitCmd(configPath *string) *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Create holdings snapshot and trades csv templates",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			paths, err := ledger.WriteTemplate(svc.Config(), force)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "ledger templates created: snapshot=%s trades=%s\n", paths.SnapshotPath, paths.TradesCSVPath)
+			return err
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing ledger template files")
+	return cmd
+}
+
+func newLedgerAddTradeCmd(configPath *string) *cobra.Command {
+	var fundCode string
+	var side string
+	var amount float64
+	var nav float64
+	var units float64
+	var fee float64
+	var note string
+	var tradeDate string
+	cmd := &cobra.Command{
+		Use:   "add-trade",
+		Short: "Append one manual buy/sell record to the ledger csv",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			parsedDate := time.Now().In(time.FixedZone("UTC+8", 8*3600))
+			if strings.TrimSpace(tradeDate) != "" {
+				parsedDate, err = time.Parse("2006-01-02", strings.TrimSpace(tradeDate))
+				if err != nil {
+					return fmt.Errorf("parse trade date: %w", err)
+				}
+			}
+			paths, trade, err := ledger.AppendTrade(svc.Config(), ledger.TradeRecord{
+				TradeDate: parsedDate,
+				FundCode:  fundCode,
+				Side:      side,
+				Amount:    amount,
+				NAV:       nav,
+				Units:     units,
+				Fee:       fee,
+				Note:      note,
+			})
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "ledger trade added: %s %s %s amount=%.2f nav=%.4f units=%.4f file=%s\n", trade.TradeDate.Format("2006-01-02"), trade.FundCode, trade.Side, trade.Amount, trade.NAV, trade.Units, paths.TradesCSVPath)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&fundCode, "fund-code", "", "fund code")
+	cmd.Flags().StringVar(&side, "side", "BUY", "trade side: BUY or SELL")
+	cmd.Flags().Float64Var(&amount, "amount", 0, "trade amount in CNY")
+	cmd.Flags().Float64Var(&nav, "nav", 0, "trade NAV")
+	cmd.Flags().Float64Var(&units, "units", 0, "trade units; optional when amount and nav are provided")
+	cmd.Flags().Float64Var(&fee, "fee", 0, "trade fee in CNY")
+	cmd.Flags().StringVar(&note, "note", "", "optional trade note")
+	cmd.Flags().StringVar(&tradeDate, "date", "", "trade date in YYYY-MM-DD; defaults to today in Asia/Shanghai")
+	_ = cmd.MarkFlagRequired("fund-code")
+	_ = cmd.MarkFlagRequired("amount")
+	_ = cmd.MarkFlagRequired("nav")
+	return cmd
+}
+
+func newLedgerCheckCmd(configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "check",
+		Short: "Validate the manual holdings snapshot and trade ledger",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := ledger.Check(svc.Config())
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "ledger check ok: snapshot_as_of=%s trades=%d funds=%d\n", result.SnapshotAsOf, result.TradeCount, len(result.Positions))
+			return err
+		},
+	}
+}
+
+func newPositionsCmd(configPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "positions",
+		Short: "Reconcile derived positions from the manual ledger",
+	}
+	cmd.AddCommand(newPositionsReconcileCmd(configPath))
+	return cmd
+}
+
+func newPositionsReconcileCmd(configPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "reconcile",
+		Short: "Rebuild estimated holdings from snapshot plus trade ledger",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.ReconcileHoldings()
+			if err != nil {
+				return err
+			}
+			lines := make([]string, 0, len(result.Positions))
+			for _, holding := range result.Positions {
+				lines = append(lines, fmt.Sprintf("%s units=%.4f cost=%.2f", holding.FundCode, holding.Units, holding.TotalCost))
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "positions reconciled: snapshot_as_of=%s trades=%d\n%s\n", result.SnapshotAsOf, result.TradeCount, strings.Join(lines, "\n"))
+			return err
+		},
+	}
 }
 
 func newMarketPoolCmd(configPath *string) *cobra.Command {

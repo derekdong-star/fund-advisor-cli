@@ -238,6 +238,38 @@ func RenderMarkdown(report model.AnalysisReport) string {
 		}
 	}
 
+	if len(report.Position) > 0 {
+		showLedgerColumns := reportHasLedger(report)
+		buf.WriteString("\n## 持仓快照\n\n")
+		if showLedgerColumns {
+			buf.WriteString("| 基金 | 当前市值 | 当前权重 | 份额 | 持仓成本 | 浮盈亏 | 收益率 | 最近手工交易 |\n")
+			buf.WriteString("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
+			for _, state := range report.Position {
+				fmt.Fprintf(&buf, "| %s | %.2f | %.2f%% | %.4f | %.2f | %s | %s | %s |\n",
+					state.Position.FundName,
+					state.CurrentValue,
+					state.CurrentWeight*100,
+					state.Position.EstimatedUnits,
+					state.HoldingCost,
+					displaySignedMoney(state.UnrealizedPnL),
+					displaySignedPercent(state.UnrealizedPnLPct),
+					displayLedgerTradeInfo(state),
+				)
+			}
+		} else {
+			buf.WriteString("| 基金 | 当前市值 | 当前权重 | 份额 |\n")
+			buf.WriteString("| --- | ---: | ---: | ---: |\n")
+			for _, state := range report.Position {
+				fmt.Fprintf(&buf, "| %s | %.2f | %.2f%% | %.4f |\n",
+					state.Position.FundName,
+					state.CurrentValue,
+					state.CurrentWeight*100,
+					state.Position.EstimatedUnits,
+				)
+			}
+		}
+	}
+
 	pauseSignals := filterSignals(report.Signals, model.ActionPauseBuy)
 	if len(pauseSignals) > 0 {
 		buf.WriteString("\n## 暂停加仓\n\n")
@@ -855,6 +887,36 @@ func displayExecutionAction(action string) string {
 	default:
 		return action
 	}
+}
+
+func displaySignedMoney(value float64) string {
+	if value > 0 {
+		return fmt.Sprintf("+%.2f", value)
+	}
+	return fmt.Sprintf("%.2f", value)
+}
+
+func displaySignedPercent(value float64) string {
+	if value > 0 {
+		return fmt.Sprintf("+%.2f%%", value*100)
+	}
+	return fmt.Sprintf("%.2f%%", value*100)
+}
+
+func reportHasLedger(report model.AnalysisReport) bool {
+	for _, state := range report.Position {
+		if state.LedgerApplied {
+			return true
+		}
+	}
+	return false
+}
+
+func displayLedgerTradeInfo(state model.PositionState) string {
+	if state.LedgerTradeCount <= 0 || state.LastLedgerTradeAt.IsZero() {
+		return "-"
+	}
+	return fmt.Sprintf("%s / %d笔", state.LastLedgerTradeAt.In(chinaTimezone).Format("2006-01-02"), state.LedgerTradeCount)
 }
 
 func displayDCAFrequency(frequency string) string {

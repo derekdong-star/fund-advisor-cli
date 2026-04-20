@@ -26,6 +26,9 @@ go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format markdown 
 go run ./cmd/fundcli dca-plan --config ./configs/portfolio.yaml --format markdown --output ./reports/dca-plan.md
 go run ./cmd/fundcli market-pool --config ./configs/portfolio.yaml --format markdown --output ./reports/market-pool.md
 go run ./cmd/fundcli run --config ./configs/portfolio.yaml --format markdown --output ./reports/daily.md
+go run ./cmd/fundcli ledger init --config ./configs/portfolio.yaml
+go run ./cmd/fundcli ledger check --config ./configs/portfolio.yaml
+go run ./cmd/fundcli positions reconcile --config ./configs/portfolio.yaml
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 180
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180
@@ -77,6 +80,21 @@ When multiple weak holdings compete for the same candidate, the recommendation e
 - This tool is designed for daily NAV products, not intraday trading.
 - QDII and ETF feeder funds can have delayed NAV updates.
 - The first fetch infers estimated units from `account_value / latest_nav`.
+- If `data/holdings_snapshot.yaml` and `data/trades.csv` exist, analysis now rebuilds real holdings from that manual ledger and prefers the reconciled units over the config-only estimate.
+
+## Manual Ledger
+
+For a closer match to your real account, you can keep a lightweight manual ledger instead of editing `account_value` every time.
+
+1. Run `go run ./cmd/fundcli ledger init --config ./configs/portfolio.yaml` once to create:
+   - `data/holdings_snapshot.yaml`
+   - `data/trades.csv`
+2. Fill `holdings_snapshot.yaml` with your baseline units and total cost.
+3. Append each buy/sell to `trades.csv`.
+4. Run `go run ./cmd/fundcli ledger check --config ./configs/portfolio.yaml` to validate the files.
+5. Run `go run ./cmd/fundcli positions reconcile --config ./configs/portfolio.yaml` to rebuild the latest estimated units in SQLite.
+
+After those files exist, normal `analyze`, `run`, and `docs publish` executions will automatically reuse the reconciled units and mark the report notes accordingly.
 
 ## Backtest
 
