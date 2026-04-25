@@ -318,6 +318,32 @@ func (s *Service) Run(ctx context.Context, days int, format string, out io.Write
 	return err
 }
 
+type backtestInput struct {
+	basePositions      []model.Position
+	candidateHistories map[string][]model.FundSnapshot
+	tradingDates       []time.Time
+	priceByCode        map[string]map[string]model.FundSnapshot
+	benchmarkValue     float64
+	benchmarkUnits     map[string]float64
+	fundMeta           map[string]model.Position
+}
+
+type backtestRun struct {
+	service              *Service
+	input                backtestInput
+	currentPositions     map[string]model.Position
+	units                map[string]float64
+	points               []model.BacktestPoint
+	trades               []model.BacktestTrade
+	cash                 float64
+	initialValue         float64
+	maxValue             float64
+	maxBenchmark         float64
+	maxDrawdown          float64
+	maxBenchmarkDrawdown float64
+	rebalanceCount       int
+}
+
 func (s *Service) Backtest(days, rebalanceEvery int) (*model.BacktestReport, error) {
 	if days <= 0 {
 		return nil, fmt.Errorf("days must be positive")
@@ -325,25 +351,42 @@ func (s *Service) Backtest(days, rebalanceEvery int) (*model.BacktestReport, err
 	if rebalanceEvery <= 0 {
 		rebalanceEvery = 20
 	}
-	if err := s.SyncPositions(); err != nil {
-		return nil, err
-	}
-	basePositions, err := s.store.ListPositions()
+	input, err := s.loadBacktestInput(days)
 	if err != nil {
 		return nil, err
 	}
+	run, err := newBacktestRun(s, input)
+	if err != nil {
+		return nil, err
+	}
+	for idx, currentDate := range input.tradingDates {
+		if err := run.recordTradingDay(idx, currentDate, rebalanceEvery); err != nil {
+			return nil, err
+		}
+	}
+	return run.report(rebalanceEvery), nil
+}
+
+func (s *Service) loadBacktestInput(days int) (backtestInput, error) {
+	if err := s.SyncPositions(); err != nil {
+		return backtestInput{}, err
+	}
+	basePositions, err := s.store.ListPositions()
+	if err != nil {
+		return backtestInput{}, err
+	}
 	if len(basePositions) == 0 {
-		return nil, fmt.Errorf("no positions configured")
+		return backtestInput{}, fmt.Errorf("no positions configured")
 	}
 
 	positionHistories := make(map[string][]model.FundSnapshot, len(basePositions))
 	for _, position := range basePositions {
 		history, err := s.store.SnapshotHistory(position.FundCode, days+200)
 		if err != nil {
-			return nil, err
+			return backtestInput{}, err
 		}
 		if len(history) < days {
-			return nil, fmt.Errorf("insufficient history for %s: need at least %d points, got %d", position.FundName, days, len(history))
+			return backtestInput{}, fmt.Errorf("insufficient history for %s: need at least %d points, got %d", position.FundName, days, len(history))
 		}
 		positionHistories[position.FundCode] = history
 	}
@@ -352,35 +395,46 @@ func (s *Service) Backtest(days, rebalanceEvery int) (*model.BacktestReport, err
 	for _, candidate := range s.config.Candidates {
 		history, err := s.store.SnapshotHistory(candidate.Code, days+200)
 		if err != nil {
-			return nil, err
+			return backtestInput{}, err
 		}
 		candidateHistories[candidate.Code] = history
 	}
 
 	tradingDates := trailingCommonDates(positionHistories, days)
 	if len(tradingDates) < 2 {
-		return nil, fmt.Errorf("not enough overlapping trading dates")
+		return backtestInput{}, fmt.Errorf("not enough overlapping trading dates")
 	}
 	startDate := tradingDates[0]
-	endDate := tradingDates[len(tradingDates)-1]
 	priceByCode := buildPriceLookup(positionHistories, candidateHistories)
 	benchmarkValue, benchmarkUnits := initializeBenchmark(basePositions, startDate, priceByCode)
 	if benchmarkValue <= 0 {
-		return nil, fmt.Errorf("failed to initialize benchmark")
+		return backtestInput{}, fmt.Errorf("failed to initialize benchmark")
 	}
+	return backtestInput{
+		basePositions:      basePositions,
+		candidateHistories: candidateHistories,
+		tradingDates:       tradingDates,
+		priceByCode:        priceByCode,
+		benchmarkValue:     benchmarkValue,
+		benchmarkUnits:     benchmarkUnits,
+		fundMeta:           fundMetadata(basePositions, s.config.Candidates),
+	}, nil
+}
 
-	currentPositions := clonePositions(basePositions)
-	fundMeta := fundMetadata(basePositions, s.config.Candidates)
+func newBacktestRun(s *Service, input backtestInput) (*backtestRun, error) {
+	currentPositions := clonePositions(input.basePositions)
+	fundMeta := input.fundMeta
 	units := make(map[string]float64, len(fundMeta))
 	var initialValue float64
-	for _, position := range basePositions {
-		price, ok := navOnOrBefore(priceByCode[position.FundCode], startDate)
+	startDate := input.tradingDates[0]
+	for _, position := range input.basePositions {
+		price, ok := navOnOrBefore(input.priceByCode[position.FundCode], startDate)
 		if !ok || price <= 0 {
 			return nil, fmt.Errorf("missing start price for %s", position.FundName)
 		}
 		positionValue := position.AccountValue
 		if positionValue <= 0 {
-			positionValue = position.TargetWeight * benchmarkValue
+			positionValue = position.TargetWeight * input.benchmarkValue
 		}
 		units[position.FundCode] = positionValue / price
 		initialValue += positionValue
@@ -388,192 +442,210 @@ func (s *Service) Backtest(days, rebalanceEvery int) (*model.BacktestReport, err
 	if initialValue <= 0 {
 		return nil, fmt.Errorf("initial portfolio value must be positive")
 	}
+	return &backtestRun{
+		service:          s,
+		input:            input,
+		currentPositions: currentPositions,
+		units:            units,
+		points:           make([]model.BacktestPoint, 0, len(input.tradingDates)),
+		trades:           make([]model.BacktestTrade, 0),
+		initialValue:     initialValue,
+	}, nil
+}
 
-	points := make([]model.BacktestPoint, 0, len(tradingDates))
-	trades := make([]model.BacktestTrade, 0)
-	cash := 0.0
-	rebalanceCount := 0
-	maxValue := 0.0
-	maxBenchmark := 0.0
-	maxDrawdown := 0.0
-	maxBenchmarkDrawdown := 0.0
-
-	for idx, currentDate := range tradingDates {
-		activePositions := snapshotPositions(currentPositions, units)
-		strategyValue := portfolioValueOnDate(units, cash, currentDate, priceByCode)
-		benchmarkSnapshot := benchmarkValueOnDate(basePositions, benchmarkUnits, currentDate, priceByCode)
-		if strategyValue > maxValue {
-			maxValue = strategyValue
-		}
-		if benchmarkSnapshot > maxBenchmark {
-			maxBenchmark = benchmarkSnapshot
-		}
-		if maxValue > 0 {
-			drawdown := 1 - strategyValue/maxValue
-			if drawdown > maxDrawdown {
-				maxDrawdown = drawdown
-			}
-		}
-		if maxBenchmark > 0 {
-			drawdown := 1 - benchmarkSnapshot/maxBenchmark
-			if drawdown > maxBenchmarkDrawdown {
-				maxBenchmarkDrawdown = drawdown
-			}
-		}
-		points = append(points, model.BacktestPoint{
-			Date:           currentDate,
-			StrategyValue:  strategyValue,
-			BenchmarkValue: benchmarkSnapshot,
-			Cash:           cash,
-		})
-		if idx == 0 || idx == len(tradingDates)-1 || idx%rebalanceEvery != 0 {
-			continue
-		}
-
-		reportSnapshot, currentValues, err := s.backtestSnapshot(activePositions, units, currentDate, priceByCode, candidateHistories)
-		if err != nil {
-			return nil, err
-		}
-		if len(reportSnapshot.Recommendations) == 0 {
-			continue
-		}
-
-		availableCash := cash
-		for _, recommendation := range reportSnapshot.Recommendations {
-			switch recommendation.Kind {
-			case "SWAP":
-				sellCode, ok := positionCodeByName(activePositions, recommendation.SourceFund)
-				if !ok {
-					continue
-				}
-				sellPrice, ok := navOnOrBefore(priceByCode[sellCode], currentDate)
-				if !ok || sellPrice <= 0 {
-					continue
-				}
-				sellAmount := minFloat(recommendation.SuggestedAmount, currentValues[sellCode])
-				if sellAmount <= 0 {
-					continue
-				}
-				sellUnits := sellAmount / sellPrice
-				if sellUnits > units[sellCode] {
-					sellUnits = units[sellCode]
-					sellAmount = sellUnits * sellPrice
-				}
-				units[sellCode] -= sellUnits
-				availableCash += sellAmount
-				trades = append(trades, model.BacktestTrade{Date: currentDate, Action: "SELL", Fund: recommendation.SourceFund, RelatedFund: recommendation.TargetFund, Amount: sellAmount, Price: sellPrice, Units: sellUnits, Reason: recommendation.Reason})
-
-				buyCode, ok := fundCodeByName(fundMeta, recommendation.TargetFund)
-				if !ok {
-					continue
-				}
-				buyPrice, ok := navOnOrBefore(priceByCode[buyCode], currentDate)
-				if !ok || buyPrice <= 0 {
-					continue
-				}
-				buyAmount := minFloat(sellAmount, availableCash)
-				if buyAmount <= 0 {
-					continue
-				}
-				buyUnits := buyAmount / buyPrice
-				units[buyCode] += buyUnits
-				availableCash -= buyAmount
-				trades = append(trades, model.BacktestTrade{Date: currentDate, Action: "BUY", Fund: recommendation.TargetFund, RelatedFund: recommendation.SourceFund, Amount: buyAmount, Price: buyPrice, Units: buyUnits, Reason: recommendation.Reason})
-
-				sellPosition := currentPositions[sellCode]
-				targetShift := transferredTargetWeight(sellPosition.TargetWeight, currentValues[sellCode], sellAmount)
-				sellPosition.TargetWeight -= targetShift
-				if sellPosition.TargetWeight < 0 {
-					sellPosition.TargetWeight = 0
-				}
-				currentPositions[sellCode] = sellPosition
-
-				buyPosition, ok := currentPositions[buyCode]
-				if !ok {
-					buyPosition = fundMeta[buyCode]
-				}
-				buyPosition.TargetWeight += targetShift
-				currentPositions[buyCode] = buyPosition
-			case "REDUCE":
-				sellCode, ok := positionCodeByName(activePositions, recommendation.SourceFund)
-				if !ok {
-					continue
-				}
-				sellPrice, ok := navOnOrBefore(priceByCode[sellCode], currentDate)
-				if !ok || sellPrice <= 0 {
-					continue
-				}
-				sellAmount := minFloat(recommendation.SuggestedAmount, currentValues[sellCode])
-				if sellAmount <= 0 {
-					continue
-				}
-				sellUnits := sellAmount / sellPrice
-				if sellUnits > units[sellCode] {
-					sellUnits = units[sellCode]
-					sellAmount = sellUnits * sellPrice
-				}
-				units[sellCode] -= sellUnits
-				availableCash += sellAmount
-				trades = append(trades, model.BacktestTrade{Date: currentDate, Action: "SELL", Fund: recommendation.SourceFund, Amount: sellAmount, Price: sellPrice, Units: sellUnits, Reason: recommendation.Reason})
-			case "BUY":
-				buyCode, ok := positionCodeByName(activePositions, recommendation.TargetFund)
-				if !ok {
-					continue
-				}
-				buyPrice, ok := navOnOrBefore(priceByCode[buyCode], currentDate)
-				if !ok || buyPrice <= 0 {
-					continue
-				}
-				buyAmount := minFloat(recommendation.SuggestedAmount, availableCash)
-				if buyAmount <= 0 {
-					continue
-				}
-				buyUnits := buyAmount / buyPrice
-				units[buyCode] += buyUnits
-				availableCash -= buyAmount
-				trades = append(trades, model.BacktestTrade{Date: currentDate, Action: "BUY", Fund: recommendation.TargetFund, Amount: buyAmount, Price: buyPrice, Units: buyUnits, Reason: recommendation.Reason})
-			}
-		}
-		cash = availableCash
-		rebalanceCount++
+func (r *backtestRun) recordTradingDay(idx int, currentDate time.Time, rebalanceEvery int) error {
+	strategyValue := portfolioValueOnDate(r.units, r.cash, currentDate, r.input.priceByCode)
+	benchmarkSnapshot := benchmarkValueOnDate(r.input.basePositions, r.input.benchmarkUnits, currentDate, r.input.priceByCode)
+	r.updateDrawdown(strategyValue, benchmarkSnapshot)
+	r.points = append(r.points, model.BacktestPoint{
+		Date:           currentDate,
+		StrategyValue:  strategyValue,
+		BenchmarkValue: benchmarkSnapshot,
+		Cash:           r.cash,
+	})
+	if idx == 0 || idx == len(r.input.tradingDates)-1 || idx%rebalanceEvery != 0 {
+		return nil
 	}
+	return r.rebalance(currentDate)
+}
 
-	finalStrategy := portfolioValueOnDate(units, cash, endDate, priceByCode)
-	finalBenchmark := benchmarkValueOnDate(basePositions, benchmarkUnits, endDate, priceByCode)
-	years := float64(len(tradingDates)) / 252.0
-	strategyReturn := safeReturn(initialValue, finalStrategy)
-	benchmarkReturn := safeReturn(benchmarkValue, finalBenchmark)
-	reportData := &model.BacktestReport{
+func (r *backtestRun) updateDrawdown(strategyValue, benchmarkSnapshot float64) {
+	if strategyValue > r.maxValue {
+		r.maxValue = strategyValue
+	}
+	if benchmarkSnapshot > r.maxBenchmark {
+		r.maxBenchmark = benchmarkSnapshot
+	}
+	if r.maxValue > 0 {
+		r.maxDrawdown = maxFloat(r.maxDrawdown, 1-strategyValue/r.maxValue)
+	}
+	if r.maxBenchmark > 0 {
+		r.maxBenchmarkDrawdown = maxFloat(r.maxBenchmarkDrawdown, 1-benchmarkSnapshot/r.maxBenchmark)
+	}
+}
+
+func (r *backtestRun) rebalance(currentDate time.Time) error {
+	activePositions := snapshotPositions(r.currentPositions, r.units)
+	reportSnapshot, currentValues, err := r.service.backtestSnapshot(activePositions, r.units, currentDate, r.input.priceByCode, r.input.candidateHistories)
+	if err != nil {
+		return err
+	}
+	if len(reportSnapshot.Recommendations) == 0 {
+		return nil
+	}
+	availableCash := r.cash
+	for _, recommendation := range reportSnapshot.Recommendations {
+		availableCash = r.executeRecommendation(activePositions, currentValues, currentDate, recommendation, availableCash)
+	}
+	r.cash = availableCash
+	r.rebalanceCount++
+	return nil
+}
+
+func (r *backtestRun) executeRecommendation(activePositions []model.Position, currentValues map[string]float64, currentDate time.Time, recommendation model.TradeRecommendation, availableCash float64) float64 {
+	switch recommendation.Kind {
+	case "SWAP":
+		return r.executeSwap(activePositions, currentValues, currentDate, recommendation, availableCash)
+	case "REDUCE":
+		return r.executeReduce(activePositions, currentValues, currentDate, recommendation, availableCash)
+	case "BUY":
+		return r.executeBuy(activePositions, currentDate, recommendation, availableCash)
+	default:
+		return availableCash
+	}
+}
+
+func (r *backtestRun) executeSwap(activePositions []model.Position, currentValues map[string]float64, currentDate time.Time, recommendation model.TradeRecommendation, availableCash float64) float64 {
+	sellCode, sellAmount, ok := r.sell(activePositions, currentValues, currentDate, recommendation.SourceFund, recommendation.TargetFund, recommendation.SuggestedAmount, recommendation.Reason)
+	if !ok {
+		return availableCash
+	}
+	availableCash += sellAmount
+	buyCode, ok := fundCodeByName(r.input.fundMeta, recommendation.TargetFund)
+	if !ok {
+		return availableCash
+	}
+	buyAmount, ok := r.buy(buyCode, currentDate, recommendation.TargetFund, recommendation.SourceFund, sellAmount, availableCash, recommendation.Reason)
+	if !ok {
+		return availableCash
+	}
+	availableCash -= buyAmount
+	r.transferTargetWeight(sellCode, buyCode, currentValues[sellCode], sellAmount)
+	return availableCash
+}
+
+func (r *backtestRun) executeReduce(activePositions []model.Position, currentValues map[string]float64, currentDate time.Time, recommendation model.TradeRecommendation, availableCash float64) float64 {
+	_, sellAmount, ok := r.sell(activePositions, currentValues, currentDate, recommendation.SourceFund, "", recommendation.SuggestedAmount, recommendation.Reason)
+	if !ok {
+		return availableCash
+	}
+	return availableCash + sellAmount
+}
+
+func (r *backtestRun) executeBuy(activePositions []model.Position, currentDate time.Time, recommendation model.TradeRecommendation, availableCash float64) float64 {
+	buyCode, ok := positionCodeByName(activePositions, recommendation.TargetFund)
+	if !ok {
+		return availableCash
+	}
+	buyAmount, ok := r.buy(buyCode, currentDate, recommendation.TargetFund, "", recommendation.SuggestedAmount, availableCash, recommendation.Reason)
+	if !ok {
+		return availableCash
+	}
+	return availableCash - buyAmount
+}
+
+func (r *backtestRun) sell(activePositions []model.Position, currentValues map[string]float64, currentDate time.Time, fundName, relatedFund string, suggestedAmount float64, reason string) (string, float64, bool) {
+	sellCode, ok := positionCodeByName(activePositions, fundName)
+	if !ok {
+		return "", 0, false
+	}
+	sellPrice, ok := navOnOrBefore(r.input.priceByCode[sellCode], currentDate)
+	if !ok || sellPrice <= 0 {
+		return "", 0, false
+	}
+	sellAmount := minFloat(suggestedAmount, currentValues[sellCode])
+	if sellAmount <= 0 {
+		return "", 0, false
+	}
+	sellUnits := sellAmount / sellPrice
+	if sellUnits > r.units[sellCode] {
+		sellUnits = r.units[sellCode]
+		sellAmount = sellUnits * sellPrice
+	}
+	r.units[sellCode] -= sellUnits
+	r.trades = append(r.trades, model.BacktestTrade{Date: currentDate, Action: "SELL", Fund: fundName, RelatedFund: relatedFund, Amount: sellAmount, Price: sellPrice, Units: sellUnits, Reason: reason})
+	return sellCode, sellAmount, true
+}
+
+func (r *backtestRun) buy(code string, currentDate time.Time, fundName, relatedFund string, suggestedAmount, availableCash float64, reason string) (float64, bool) {
+	buyPrice, ok := navOnOrBefore(r.input.priceByCode[code], currentDate)
+	if !ok || buyPrice <= 0 {
+		return 0, false
+	}
+	buyAmount := minFloat(suggestedAmount, availableCash)
+	if buyAmount <= 0 {
+		return 0, false
+	}
+	buyUnits := buyAmount / buyPrice
+	r.units[code] += buyUnits
+	r.trades = append(r.trades, model.BacktestTrade{Date: currentDate, Action: "BUY", Fund: fundName, RelatedFund: relatedFund, Amount: buyAmount, Price: buyPrice, Units: buyUnits, Reason: reason})
+	return buyAmount, true
+}
+
+func (r *backtestRun) transferTargetWeight(sellCode, buyCode string, currentValue, sellAmount float64) {
+	sellPosition := r.currentPositions[sellCode]
+	targetShift := transferredTargetWeight(sellPosition.TargetWeight, currentValue, sellAmount)
+	sellPosition.TargetWeight -= targetShift
+	if sellPosition.TargetWeight < 0 {
+		sellPosition.TargetWeight = 0
+	}
+	r.currentPositions[sellCode] = sellPosition
+
+	buyPosition, ok := r.currentPositions[buyCode]
+	if !ok {
+		buyPosition = r.input.fundMeta[buyCode]
+	}
+	buyPosition.TargetWeight += targetShift
+	r.currentPositions[buyCode] = buyPosition
+}
+
+func (r *backtestRun) report(rebalanceEvery int) *model.BacktestReport {
+	endDate := r.input.tradingDates[len(r.input.tradingDates)-1]
+	finalStrategy := portfolioValueOnDate(r.units, r.cash, endDate, r.input.priceByCode)
+	finalBenchmark := benchmarkValueOnDate(r.input.basePositions, r.input.benchmarkUnits, endDate, r.input.priceByCode)
+	years := float64(len(r.input.tradingDates)) / 252.0
+	strategyReturn := safeReturn(r.initialValue, finalStrategy)
+	benchmarkReturn := safeReturn(r.input.benchmarkValue, finalBenchmark)
+	return &model.BacktestReport{
 		Summary: model.BacktestSummary{
-			PortfolioName:             s.config.Portfolio.Name,
-			StartDate:                 startDate,
+			PortfolioName:             r.service.config.Portfolio.Name,
+			StartDate:                 r.input.tradingDates[0],
 			EndDate:                   endDate,
-			TradingDays:               len(tradingDates),
+			TradingDays:               len(r.input.tradingDates),
 			RebalanceEvery:            rebalanceEvery,
-			RebalanceCount:            rebalanceCount,
-			TradeCount:                len(trades),
-			InitialValue:              initialValue,
+			RebalanceCount:            r.rebalanceCount,
+			TradeCount:                len(r.trades),
+			InitialValue:              r.initialValue,
 			FinalValue:                finalStrategy,
-			BenchmarkInitialValue:     benchmarkValue,
+			BenchmarkInitialValue:     r.input.benchmarkValue,
 			BenchmarkFinalValue:       finalBenchmark,
-			CashFinal:                 cash,
+			CashFinal:                 r.cash,
 			TotalReturn:               strategyReturn,
 			BenchmarkReturn:           benchmarkReturn,
 			ExcessReturn:              strategyReturn - benchmarkReturn,
 			AnnualizedReturn:          annualizedReturn(strategyReturn, years),
 			BenchmarkAnnualizedReturn: annualizedReturn(benchmarkReturn, years),
-			MaxDrawdown:               maxDrawdown,
-			BenchmarkMaxDrawdown:      maxBenchmarkDrawdown,
+			MaxDrawdown:               r.maxDrawdown,
+			BenchmarkMaxDrawdown:      r.maxBenchmarkDrawdown,
 			Notes: []string{
 				"回测按固定周期重跑当前规则，不含申赎费、滑点、税费",
 				"基准为初始持仓按买入并持有计算",
 				"买入仅使用卖出回笼现金，不额外注资",
 			},
 		},
-		Points: points,
-		Trades: trades,
+		Points: r.points,
+		Trades: r.trades,
 	}
-	return reportData, nil
 }
 
 func (s *Service) backtestSnapshot(positions []model.Position, units map[string]float64, currentDate time.Time, priceByCode map[string]map[string]model.FundSnapshot, candidateHistories map[string][]model.FundSnapshot) (model.AnalysisReport, map[string]float64, error) {

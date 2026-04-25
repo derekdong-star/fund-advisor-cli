@@ -35,6 +35,14 @@ type marketPoolCandidate struct {
 	Item model.MarketPoolItem
 }
 
+type marketPoolMetrics struct {
+	Return20D       float64
+	Return60D       float64
+	Return120D      float64
+	Return250D      float64
+	MaxDrawdown120D float64
+}
+
 func (s *Service) BuildMarketPool(ctx context.Context, days int) (*model.MarketPoolReport, error) {
 	if !s.config.MarketPool.Enabled {
 		return nil, fmt.Errorf("market pool is disabled")
@@ -46,86 +54,121 @@ func (s *Service) BuildMarketPool(ctx context.Context, days int) (*model.MarketP
 	if err != nil {
 		return nil, err
 	}
-	previous, err := s.store.LatestMarketPool()
-	if err != nil {
-		previous = nil
-	}
-	previousByTheme := make(map[string]model.MarketPoolItem)
-	if previous != nil {
-		for _, item := range previous.Items {
-			previousByTheme[item.ThemeKey] = item
-		}
-	}
+	previousByTheme := s.latestMarketPoolItemsByTheme()
 	profileCache := make(map[string]*model.MarketFundProfile)
+	report := newMarketPoolReport(len(allFunds), s.config.MarketPool.RetentionScoreGap)
+	for _, theme := range defaultMarketThemes(s.config) {
+		s.processMarketTheme(ctx, theme, allFunds, days, previousByTheme, profileCache, report)
+	}
+	finalizeMarketPoolReport(report, s.config.MarketPool.SelectionCount)
+	runID, err := s.store.SaveMarketPool(*report)
+	if err != nil {
+		return nil, err
+	}
+	report.RunID = runID
+	return report, nil
+}
+
+func (s *Service) latestMarketPoolItemsByTheme() map[string]model.MarketPoolItem {
+	previous, err := s.store.LatestMarketPool()
+	if err != nil || previous == nil {
+		return nil
+	}
+	items := make(map[string]model.MarketPoolItem, len(previous.Items))
+	for _, item := range previous.Items {
+		items[item.ThemeKey] = item
+	}
+	return items
+}
+
+func newMarketPoolReport(universeCount, retentionScoreGap int) *model.MarketPoolReport {
 	runDate := time.Now().UTC()
-	report := &model.MarketPoolReport{
+	return &model.MarketPoolReport{
 		Summary: model.MarketPoolSummary{
 			RunDate:       runDate,
-			UniverseCount: len(allFunds),
+			UniverseCount: universeCount,
 			GeneratedAt:   runDate,
 			Notes: []string{
-				fmt.Sprintf("稳定候选池按固定主题筛选，旧候选若分数仅落后 %d 分以内则继续保留。", s.config.MarketPool.RetentionScoreGap),
+				fmt.Sprintf("稳定候选池按固定主题筛选，旧候选若分数仅落后 %d 分以内则继续保留。", retentionScoreGap),
 			},
 		},
 	}
-	themes := defaultMarketThemes(s.config)
-	for _, theme := range themes {
-		matched := filterThemeFunds(allFunds, theme)
-		report.Summary.MatchedCount += len(matched)
-		if len(matched) == 0 {
-			report.Summary.Notes = append(report.Summary.Notes, fmt.Sprintf("%s 主题未匹配到基金名称。", theme.Label))
-			continue
-		}
-		ranked, err := s.collectThemeRankedCandidates(ctx, theme, matched)
-		if err != nil {
-			report.Summary.Notes = append(report.Summary.Notes, fmt.Sprintf("%s 主题抓取失败：%v", theme.Label, err))
-			continue
-		}
-		candidates := make([]marketPoolCandidate, 0, len(ranked))
-		for _, candidate := range ranked {
-			profile, ok := profileCache[candidate.Fund.Code]
-			if !ok {
-				profile, err = s.fetcher.FetchMarketProfile(ctx, candidate.Fund, candidate.EstablishedDate, days)
-				if err != nil {
-					continue
-				}
-				profileCache[candidate.Fund.Code] = profile
-			}
-			item, ok := buildMarketPoolItem(theme, s.config.MarketPool, profile)
-			if !ok {
+}
+
+func (s *Service) processMarketTheme(ctx context.Context, theme marketTheme, allFunds []model.MarketSearchFund, days int, previousByTheme map[string]model.MarketPoolItem, profileCache map[string]*model.MarketFundProfile, report *model.MarketPoolReport) {
+	matched := filterThemeFunds(allFunds, theme)
+	report.Summary.MatchedCount += len(matched)
+	if len(matched) == 0 {
+		report.Summary.Notes = append(report.Summary.Notes, fmt.Sprintf("%s 主题未匹配到基金名称。", theme.Label))
+		return
+	}
+	ranked, err := s.collectThemeRankedCandidates(ctx, theme, matched)
+	if err != nil {
+		report.Summary.Notes = append(report.Summary.Notes, fmt.Sprintf("%s 主题抓取失败：%v", theme.Label, err))
+		return
+	}
+	candidates := s.buildThemeMarketPoolCandidates(ctx, theme, ranked, days, profileCache)
+	report.Summary.EligibleCount += len(candidates)
+	if len(candidates) == 0 {
+		report.Summary.Notes = append(report.Summary.Notes, fmt.Sprintf("%s 主题暂无满足阈值的稳定候选。", theme.Label))
+		return
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return preferMarketPoolCandidate(candidates[i], candidates[j])
+	})
+	selected, retained := selectMarketPoolCandidate(theme, candidates, previousByTheme, s.config.MarketPool.RetentionScoreGap)
+	if retained {
+		report.Summary.RetainedCount++
+	}
+	report.Items = append(report.Items, selected)
+}
+
+func (s *Service) buildThemeMarketPoolCandidates(ctx context.Context, theme marketTheme, ranked []marketRankCandidate, days int, profileCache map[string]*model.MarketFundProfile) []marketPoolCandidate {
+	candidates := make([]marketPoolCandidate, 0, len(ranked))
+	for _, candidate := range ranked {
+		profile, ok := profileCache[candidate.Fund.Code]
+		if !ok {
+			fetched, err := s.fetcher.FetchMarketProfile(ctx, candidate.Fund, candidate.EstablishedDate, days)
+			if err != nil {
 				continue
 			}
-			candidates = append(candidates, marketPoolCandidate{Item: item})
-			if len(candidates) >= s.config.MarketPool.MaxFundsPerTheme {
-				break
-			}
+			profile = fetched
+			profileCache[candidate.Fund.Code] = profile
 		}
-		report.Summary.EligibleCount += len(candidates)
-		if len(candidates) == 0 {
-			report.Summary.Notes = append(report.Summary.Notes, fmt.Sprintf("%s 主题暂无满足阈值的稳定候选。", theme.Label))
+		item, ok := buildMarketPoolItem(theme, s.config.MarketPool, profile)
+		if !ok {
 			continue
 		}
-		sort.Slice(candidates, func(i, j int) bool {
-			return preferMarketPoolCandidate(candidates[i], candidates[j])
-		})
-		selected := candidates[0].Item
-		if prev, ok := previousByTheme[theme.Key]; ok {
-			for _, candidate := range candidates {
-				if candidate.Item.FundCode != prev.FundCode {
-					continue
-				}
-				if candidate.Item.Score >= selected.Score-s.config.MarketPool.RetentionScoreGap {
-					candidate.Item.Retained = true
-					selected = candidate.Item
-					report.Summary.RetainedCount++
-				}
-				break
-			}
+		candidates = append(candidates, marketPoolCandidate{Item: item})
+		if len(candidates) >= s.config.MarketPool.MaxFundsPerTheme {
+			break
 		}
-		report.Items = append(report.Items, selected)
 	}
-	if len(report.Items) > s.config.MarketPool.SelectionCount {
-		report.Items = report.Items[:s.config.MarketPool.SelectionCount]
+	return candidates
+}
+
+func selectMarketPoolCandidate(theme marketTheme, candidates []marketPoolCandidate, previousByTheme map[string]model.MarketPoolItem, retentionScoreGap int) (model.MarketPoolItem, bool) {
+	selected := candidates[0].Item
+	prev, ok := previousByTheme[theme.Key]
+	if !ok {
+		return selected, false
+	}
+	for _, candidate := range candidates {
+		if candidate.Item.FundCode != prev.FundCode {
+			continue
+		}
+		if candidate.Item.Score >= selected.Score-retentionScoreGap {
+			candidate.Item.Retained = true
+			return candidate.Item, true
+		}
+		break
+	}
+	return selected, false
+}
+
+func finalizeMarketPoolReport(report *model.MarketPoolReport, selectionCount int) {
+	if len(report.Items) > selectionCount {
+		report.Items = report.Items[:selectionCount]
 	}
 	for idx := range report.Items {
 		report.Items[idx].Rank = idx + 1
@@ -134,12 +177,6 @@ func (s *Service) BuildMarketPool(ctx context.Context, days int) (*model.MarketP
 	if len(report.Items) == 0 {
 		report.Summary.Notes = append(report.Summary.Notes, "当前没有筛选出稳定候选，建议检查主题关键词或放宽阈值。")
 	}
-	runID, err := s.store.SaveMarketPool(*report)
-	if err != nil {
-		return nil, err
-	}
-	report.RunID = runID
-	return report, nil
 }
 
 func (s *Service) LatestMarketPool() (*model.MarketPoolReport, error) {
@@ -271,41 +308,77 @@ func buildMarketPoolItem(theme marketTheme, cfg config.MarketPoolConfig, profile
 	if profile == nil || profile.Latest == nil || len(profile.History) == 0 {
 		return model.MarketPoolItem{}, false
 	}
-	return20D := trailingReturn(profile.History, 20)
-	return60D := trailingReturn(profile.History, 60)
-	return120D := trailingReturn(profile.History, 120)
-	return250D := trailingReturn(profile.History, 250)
-	maxDrawdown120D := trailingMaxDrawdown(profile.History, 120)
-	if cfg.MinFundSizeYi > 0 && profile.FundSizeYi > 0 && profile.FundSizeYi < cfg.MinFundSizeYi {
+	metrics := buildMarketPoolMetrics(profile.History)
+	if !passesMarketPoolThresholds(theme, cfg, profile, metrics) {
 		return model.MarketPoolItem{}, false
+	}
+	score, reasons := scoreMarketPoolProfile(theme, cfg, profile, metrics)
+	if score < cfg.MinScore {
+		return model.MarketPoolItem{}, false
+	}
+	return model.MarketPoolItem{
+		ThemeKey:         theme.Key,
+		ThemeLabel:       theme.Label,
+		FundCode:         profile.Fund.Code,
+		FundName:         profile.Fund.Name,
+		FundType:         profile.Fund.FundType,
+		Score:            score,
+		Return20D:        metrics.Return20D,
+		Return60D:        metrics.Return60D,
+		Return120D:       metrics.Return120D,
+		Return250D:       metrics.Return250D,
+		MaxDrawdown120D:  metrics.MaxDrawdown120D,
+		FundSizeYi:       profile.FundSizeYi,
+		EstablishedYears: profile.EstablishedYears,
+		LatestTradeDate:  profile.Latest.TradeDate,
+		Reason:           strings.Join(reasons, "；"),
+	}, true
+}
+
+func buildMarketPoolMetrics(history []model.FundSnapshot) marketPoolMetrics {
+	return marketPoolMetrics{
+		Return20D:       trailingReturn(history, 20),
+		Return60D:       trailingReturn(history, 60),
+		Return120D:      trailingReturn(history, 120),
+		Return250D:      trailingReturn(history, 250),
+		MaxDrawdown120D: trailingMaxDrawdown(history, 120),
+	}
+}
+
+func passesMarketPoolThresholds(theme marketTheme, cfg config.MarketPoolConfig, profile *model.MarketFundProfile, metrics marketPoolMetrics) bool {
+	if cfg.MinFundSizeYi > 0 && profile.FundSizeYi > 0 && profile.FundSizeYi < cfg.MinFundSizeYi {
+		return false
 	}
 	if profile.EstablishedYears < cfg.MinEstablishedYears {
-		return model.MarketPoolItem{}, false
+		return false
 	}
-	if return120D < theme.MinReturn120D || return250D < theme.MinReturn250D || maxDrawdown120D > theme.MaxDrawdown120D {
-		return model.MarketPoolItem{}, false
-	}
+	return metrics.Return120D >= theme.MinReturn120D &&
+		metrics.Return250D >= theme.MinReturn250D &&
+		metrics.MaxDrawdown120D <= theme.MaxDrawdown120D
+}
+
+func scoreMarketPoolProfile(theme marketTheme, cfg config.MarketPoolConfig, profile *model.MarketFundProfile, metrics marketPoolMetrics) (int, []string) {
 	reasons := make([]string, 0, 8)
 	score := 0
-	if return250D >= theme.MinReturn250D {
+	if metrics.Return250D >= theme.MinReturn250D {
 		score += 2
-		reasons = append(reasons, fmt.Sprintf("250日收益 %.2f%%", return250D*100))
+		reasons = append(reasons, fmt.Sprintf("250日收益 %.2f%%", metrics.Return250D*100))
 	}
-	if return120D >= theme.MinReturn120D {
+	if metrics.Return120D >= theme.MinReturn120D {
 		score += 2
-		reasons = append(reasons, fmt.Sprintf("120日收益 %.2f%%", return120D*100))
+		reasons = append(reasons, fmt.Sprintf("120日收益 %.2f%%", metrics.Return120D*100))
 	}
-	if return60D > 0 {
+	if metrics.Return60D > 0 {
 		score++
-		reasons = append(reasons, fmt.Sprintf("60日收益 %.2f%%", return60D*100))
+		reasons = append(reasons, fmt.Sprintf("60日收益 %.2f%%", metrics.Return60D*100))
 	}
-	if return20D > -0.02 {
+	if metrics.Return20D > -0.02 {
 		score++
-		reasons = append(reasons, fmt.Sprintf("20日回撤可控 %.2f%%", return20D*100))
+		reasons = append(reasons, fmt.Sprintf("20日回撤可控 %.2f%%", metrics.Return20D*100))
 	}
-	if maxDrawdown120D <= theme.MaxDrawdown120D {
+	if metrics.MaxDrawdown120D <= theme.MaxDrawdown120D {
 		score++
-		reasons = append(reasons, fmt.Sprintf("120日最大回撤 %.2f%%", maxDrawdown120D*100))
+		reasons = append(reasons, fmt.Sprintf("120日最大回撤 %.2f%%", metrics.MaxDrawdown120D*100))
 	}
 	if profile.FundSizeYi >= maxFloat(profileThreshold(cfg.MinFundSizeYi), 20) {
 		score++
@@ -324,26 +397,7 @@ func buildMarketPoolItem(theme marketTheme, cfg config.MarketPoolConfig, profile
 	if shareClassReason != "" {
 		reasons = append(reasons, shareClassReason)
 	}
-	if score < cfg.MinScore {
-		return model.MarketPoolItem{}, false
-	}
-	return model.MarketPoolItem{
-		ThemeKey:         theme.Key,
-		ThemeLabel:       theme.Label,
-		FundCode:         profile.Fund.Code,
-		FundName:         profile.Fund.Name,
-		FundType:         profile.Fund.FundType,
-		Score:            score,
-		Return20D:        return20D,
-		Return60D:        return60D,
-		Return120D:       return120D,
-		Return250D:       return250D,
-		MaxDrawdown120D:  maxDrawdown120D,
-		FundSizeYi:       profile.FundSizeYi,
-		EstablishedYears: profile.EstablishedYears,
-		LatestTradeDate:  profile.Latest.TradeDate,
-		Reason:           strings.Join(reasons, "；"),
-	}, true
+	return score, reasons
 }
 
 func filterThemeFunds(funds []model.MarketSearchFund, theme marketTheme) []model.MarketSearchFund {

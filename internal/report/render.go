@@ -157,28 +157,48 @@ func RenderMarkdown(report model.AnalysisReport) string {
 	var buf bytes.Buffer
 	displayRecommendations := displayRecommendations(report)
 	buyRecommendations := filterRecommendations(displayRecommendations, "BUY")
+	reduceRecommendations := filterRecommendations(displayRecommendations, "REDUCE")
+	swapRecommendations := filterRecommendations(displayRecommendations, "SWAP")
+	holdSignals := filterSignals(report.Signals, model.ActionHold)
+	pauseSignals := filterSignals(report.Signals, model.ActionPauseBuy)
 	executionPlan := buildDisplayExecutionPlan(displayRecommendations)
 
-	fmt.Fprintf(&buf, "# %s 投资行动手册\n\n", report.Summary.PortfolioName)
-	fmt.Fprintf(&buf, "- 运行时间：`%s`\n", formatDisplayTime(report.Summary.RunDate))
-	fmt.Fprintf(&buf, "- 组合市值：`%.2f`\n", report.Summary.PortfolioValue)
-	fmt.Fprintf(&buf, "- 当日加权涨跌：`%.2f%%`\n", report.Summary.WeightedDayChangePct*100)
+	renderMarkdownHeader(&buf, report)
+	renderBuyRecommendationsSection(&buf, report, buyRecommendations)
+	renderReduceRecommendationsSection(&buf, reduceRecommendations)
+	renderSwapRecommendationsSection(&buf, swapRecommendations)
+	renderSignalSection(&buf, "继续持有", holdSignals)
+	renderPositionSnapshotSection(&buf, report)
+	renderSignalSection(&buf, "暂停加仓", pauseSignals)
+	renderExecutionPlanSection(&buf, executionPlan)
+	renderCandidateSection(&buf, report.Candidates)
+	return buf.String()
+}
+
+func renderMarkdownHeader(buf *bytes.Buffer, report model.AnalysisReport) {
+	displayRecommendations := displayRecommendations(report)
+	fmt.Fprintf(buf, "# %s 投资行动手册\n\n", report.Summary.PortfolioName)
+	fmt.Fprintf(buf, "- 运行时间：`%s`\n", formatDisplayTime(report.Summary.RunDate))
+	fmt.Fprintf(buf, "- 组合市值：`%.2f`\n", report.Summary.PortfolioValue)
+	fmt.Fprintf(buf, "- 当日加权涨跌：`%.2f%%`\n", report.Summary.WeightedDayChangePct*100)
 	if len(report.Summary.Notes) > 0 {
 		for _, note := range report.Summary.Notes {
-			fmt.Fprintf(&buf, "- 备注：%s\n", note)
+			fmt.Fprintf(buf, "- 备注：%s\n", note)
 		}
 	}
 	buf.WriteString("\n## 本期结论\n\n")
 	for _, line := range renderPlaybookSummary(report, displayRecommendations) {
-		fmt.Fprintf(&buf, "- %s\n", line)
+		fmt.Fprintf(buf, "- %s\n", line)
 	}
+}
 
+func renderBuyRecommendationsSection(buf *bytes.Buffer, report model.AnalysisReport, buyRecommendations []model.TradeRecommendation) {
 	if len(buyRecommendations) > 0 {
 		buf.WriteString("\n## 继续定投\n\n")
 		buf.WriteString("| 基金 | 金额 | 权重 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | --- |\n")
 		for _, recommendation := range buyRecommendations {
-			fmt.Fprintf(&buf, "| %s | %.0f | %.2f%% | %s |\n",
+			fmt.Fprintf(buf, "| %s | %.0f | %.2f%% | %s |\n",
 				recommendation.TargetFund,
 				recommendation.SuggestedAmount,
 				recommendation.SuggestedWeight*100,
@@ -186,17 +206,18 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 		if report.DCAPlan != nil && report.DCAPlan.Summary.ReserveAmount > 0 {
-			fmt.Fprintf(&buf, "\n- 本月定投预留：`%.0f`\n", report.DCAPlan.Summary.ReserveAmount)
+			fmt.Fprintf(buf, "\n- 本月定投预留：`%.0f`\n", report.DCAPlan.Summary.ReserveAmount)
 		}
 	}
+}
 
-	reduceRecommendations := filterRecommendations(displayRecommendations, "REDUCE")
+func renderReduceRecommendationsSection(buf *bytes.Buffer, reduceRecommendations []model.TradeRecommendation) {
 	if len(reduceRecommendations) > 0 {
 		buf.WriteString("\n## 减仓观察\n\n")
 		buf.WriteString("| 基金 | 金额 | 权重 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | --- |\n")
 		for _, recommendation := range reduceRecommendations {
-			fmt.Fprintf(&buf, "| %s | %.0f | %.2f%% | %s |\n",
+			fmt.Fprintf(buf, "| %s | %.0f | %.2f%% | %s |\n",
 				recommendation.SourceFund,
 				recommendation.SuggestedAmount,
 				recommendation.SuggestedWeight*100,
@@ -204,14 +225,15 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 	}
+}
 
-	swapRecommendations := filterRecommendations(displayRecommendations, "SWAP")
+func renderSwapRecommendationsSection(buf *bytes.Buffer, swapRecommendations []model.TradeRecommendation) {
 	if len(swapRecommendations) > 0 {
 		buf.WriteString("\n## 替换观察\n\n")
 		buf.WriteString("| 从 | 到 | 金额 | 权重 | 原因 |\n")
 		buf.WriteString("| --- | --- | ---: | ---: | --- |\n")
 		for _, recommendation := range swapRecommendations {
-			fmt.Fprintf(&buf, "| %s | %s | %.0f | %.2f%% | %s |\n",
+			fmt.Fprintf(buf, "| %s | %s | %.0f | %.2f%% | %s |\n",
 				recommendation.SourceFund,
 				recommendation.TargetFund,
 				recommendation.SuggestedAmount,
@@ -220,14 +242,15 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 	}
+}
 
-	holdSignals := filterSignals(report.Signals, model.ActionHold)
-	if len(holdSignals) > 0 {
-		buf.WriteString("\n## 继续持有\n\n")
+func renderSignalSection(buf *bytes.Buffer, title string, signals []model.FundSignal) {
+	if len(signals) > 0 {
+		fmt.Fprintf(buf, "\n## %s\n\n", title)
 		buf.WriteString("| 基金 | 当前 | 目标 | 20日 | 60日 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | ---: | ---: | --- |\n")
-		for _, signal := range holdSignals {
-			fmt.Fprintf(&buf, "| %s | %.2f%% | %.2f%% | %.2f%% | %.2f%% | %s |\n",
+		for _, signal := range signals {
+			fmt.Fprintf(buf, "| %s | %.2f%% | %.2f%% | %.2f%% | %.2f%% | %s |\n",
 				signal.FundName,
 				signal.CurrentWeight*100,
 				signal.TargetWeight*100,
@@ -237,7 +260,9 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 	}
+}
 
+func renderPositionSnapshotSection(buf *bytes.Buffer, report model.AnalysisReport) {
 	if len(report.Position) > 0 {
 		showLedgerColumns := reportHasLedger(report)
 		buf.WriteString("\n## 持仓快照\n\n")
@@ -245,7 +270,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			buf.WriteString("| 基金 | 当前市值 | 当前权重 | 份额 | 持仓成本 | 浮盈亏 | 收益率 | 最近手工交易 |\n")
 			buf.WriteString("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
 			for _, state := range report.Position {
-				fmt.Fprintf(&buf, "| %s | %.2f | %.2f%% | %.4f | %.2f | %s | %s | %s |\n",
+				fmt.Fprintf(buf, "| %s | %.2f | %.2f%% | %.4f | %.2f | %s | %s | %s |\n",
 					state.Position.FundName,
 					state.CurrentValue,
 					state.CurrentWeight*100,
@@ -260,7 +285,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			buf.WriteString("| 基金 | 当前市值 | 当前权重 | 份额 |\n")
 			buf.WriteString("| --- | ---: | ---: | ---: |\n")
 			for _, state := range report.Position {
-				fmt.Fprintf(&buf, "| %s | %.2f | %.2f%% | %.4f |\n",
+				fmt.Fprintf(buf, "| %s | %.2f | %.2f%% | %.4f |\n",
 					state.Position.FundName,
 					state.CurrentValue,
 					state.CurrentWeight*100,
@@ -269,36 +294,21 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			}
 		}
 	}
+}
 
-	pauseSignals := filterSignals(report.Signals, model.ActionPauseBuy)
-	if len(pauseSignals) > 0 {
-		buf.WriteString("\n## 暂停加仓\n\n")
-		buf.WriteString("| 基金 | 当前 | 目标 | 20日 | 60日 | 原因 |\n")
-		buf.WriteString("| --- | ---: | ---: | ---: | ---: | --- |\n")
-		for _, signal := range pauseSignals {
-			fmt.Fprintf(&buf, "| %s | %.2f%% | %.2f%% | %.2f%% | %.2f%% | %s |\n",
-				signal.FundName,
-				signal.CurrentWeight*100,
-				signal.TargetWeight*100,
-				signal.Return20D*100,
-				signal.Return60D*100,
-				signal.Reason,
-			)
-		}
-	}
-
+func renderExecutionPlanSection(buf *bytes.Buffer, executionPlan *model.ExecutionPlan) {
 	if executionPlan != nil && len(executionPlan.Steps) > 0 {
 		buf.WriteString("\n## 执行顺序\n\n")
-		fmt.Fprintf(&buf, "- 总卖出：`%.0f`\n", executionPlan.GrossSellAmount)
-		fmt.Fprintf(&buf, "- 总买入：`%.0f`\n", executionPlan.GrossBuyAmount)
-		fmt.Fprintf(&buf, "- 替换金额：`%.0f`\n", executionPlan.SwapAmount)
-		fmt.Fprintf(&buf, "- 减仓金额：`%.0f`\n", executionPlan.ReduceAmount)
-		fmt.Fprintf(&buf, "- 买入金额：`%.0f`\n", executionPlan.BuyAmount)
-		fmt.Fprintf(&buf, "- 净现金变化：`%.0f`\n\n", executionPlan.NetCashChange)
+		fmt.Fprintf(buf, "- 总卖出：`%.0f`\n", executionPlan.GrossSellAmount)
+		fmt.Fprintf(buf, "- 总买入：`%.0f`\n", executionPlan.GrossBuyAmount)
+		fmt.Fprintf(buf, "- 替换金额：`%.0f`\n", executionPlan.SwapAmount)
+		fmt.Fprintf(buf, "- 减仓金额：`%.0f`\n", executionPlan.ReduceAmount)
+		fmt.Fprintf(buf, "- 买入金额：`%.0f`\n", executionPlan.BuyAmount)
+		fmt.Fprintf(buf, "- 净现金变化：`%.0f`\n\n", executionPlan.NetCashChange)
 		buf.WriteString("| 步骤 | 动作 | 基金 | 关联 | 金额 | 资金来源 | 原因 |\n")
 		buf.WriteString("| ---: | --- | --- | --- | ---: | --- | --- |\n")
 		for _, step := range executionPlan.Steps {
-			fmt.Fprintf(&buf, "| %d | %s | %s | %s | %.0f | %s | %s |\n",
+			fmt.Fprintf(buf, "| %d | %s | %s | %s | %.0f | %s | %s |\n",
 				step.Order,
 				displayExecutionAction(step.Action),
 				step.Fund,
@@ -309,12 +319,15 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 	}
-	if len(report.Candidates) > 0 {
+}
+
+func renderCandidateSection(buf *bytes.Buffer, candidates []model.CandidateSuggestion) {
+	if len(candidates) > 0 {
 		buf.WriteString("\n## 候选替代\n\n")
 		buf.WriteString("| 基金 | 评分 | 20日 | 60日 | 替代对象 | 原因 |\n")
 		buf.WriteString("| --- | ---: | ---: | ---: | --- | --- |\n")
-		for _, candidate := range report.Candidates {
-			fmt.Fprintf(&buf, "| %s | %d | %.2f%% | %.2f%% | %s | %s |\n",
+		for _, candidate := range candidates {
+			fmt.Fprintf(buf, "| %s | %d | %.2f%% | %.2f%% | %s | %s |\n",
 				candidate.FundName,
 				candidate.Score,
 				candidate.Return20D*100,
@@ -324,7 +337,6 @@ func RenderMarkdown(report model.AnalysisReport) string {
 			)
 		}
 	}
-	return buf.String()
 }
 
 func renderPlaybookSummary(report model.AnalysisReport, recommendations []model.TradeRecommendation) []string {
