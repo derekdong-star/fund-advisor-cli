@@ -1,5 +1,5 @@
 {
-  "last_run_date": "2026-05-08",
+  "last_run_date": "2026-05-13",
   "latest": {
     "backtest": {
       "label": "策略回测",
@@ -21,19 +21,19 @@
   "archive": {
     "backtest": {
       "label": "归档策略回测",
-      "path": "archive/2026/05/08/backtest.md"
+      "path": "archive/2026/05/13/backtest.md"
     },
     "daily": {
       "label": "归档每日报告",
-      "path": "archive/2026/05/08/daily.md"
+      "path": "archive/2026/05/13/daily.md"
     },
     "dca-plan": {
       "label": "归档定投计划",
-      "path": "archive/2026/05/08/dca-plan.md"
+      "path": "archive/2026/05/13/dca-plan.md"
     },
     "market-pool": {
       "label": "归档候选池",
-      "path": "archive/2026/05/08/market-pool.md"
+      "path": "archive/2026/05/13/market-pool.md"
     }
   }
 }
