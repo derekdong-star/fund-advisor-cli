@@ -175,6 +175,7 @@ type AnalysisReport struct {
 	Recommendations []TradeRecommendation `json:"recommendations,omitempty"`
 	ExecutionPlan   *ExecutionPlan        `json:"execution_plan,omitempty"`
 	DCAPlan         *DCAPlanReport        `json:"dca_plan,omitempty"`
+	Opportunity     *OpportunityReport    `json:"opportunity,omitempty"`
 	Position        []PositionState       `json:"position,omitempty"`
 }
 
@@ -300,6 +301,49 @@ type MarketPoolReport struct {
 	RunID   int64             `json:"run_id"`
 	Summary MarketPoolSummary `json:"summary"`
 	Items   []MarketPoolItem  `json:"items,omitempty"`
+}
+
+type OpportunitySummary struct {
+	RunDate              time.Time `json:"run_date"`
+	Window               string    `json:"window"`
+	Reason               string    `json:"reason"`
+	HoldingOpportunities int       `json:"holding_opportunities"`
+	CandidateCount       int       `json:"candidate_count"`
+	GeneratedAt          time.Time `json:"generated_at"`
+}
+
+type OpportunityHolding struct {
+	Priority      int       `json:"priority"`
+	FundCode      string    `json:"fund_code"`
+	FundName      string    `json:"fund_name"`
+	CurrentWeight float64   `json:"current_weight"`
+	TargetWeight  float64   `json:"target_weight"`
+	PlannedAmount float64   `json:"planned_amount"`
+	Return20D     float64   `json:"return_20d"`
+	Return60D     float64   `json:"return_60d"`
+	Return120D    float64   `json:"return_120d"`
+	CreatedAt     time.Time `json:"created_at"`
+	Reason        string    `json:"reason"`
+}
+
+type OpportunityCandidate struct {
+	Rank       int       `json:"rank"`
+	ThemeLabel string    `json:"theme_label"`
+	FundCode   string    `json:"fund_code"`
+	FundName   string    `json:"fund_name"`
+	Score      int       `json:"score"`
+	Retained   bool      `json:"retained"`
+	Return20D  float64   `json:"return_20d"`
+	Return60D  float64   `json:"return_60d"`
+	Return120D float64   `json:"return_120d"`
+	CreatedAt  time.Time `json:"created_at"`
+	Reason     string    `json:"reason"`
+}
+
+type OpportunityReport struct {
+	Summary    OpportunitySummary     `json:"summary"`
+	Holdings   []OpportunityHolding   `json:"holdings,omitempty"`
+	Candidates []OpportunityCandidate `json:"candidates,omitempty"`
 }
 
 type FetchResult struct {

@@ -165,6 +165,7 @@ func RenderMarkdown(report model.AnalysisReport) string {
 
 	renderMarkdownHeader(&buf, report)
 	renderBuyRecommendationsSection(&buf, report, buyRecommendations)
+	renderOpportunitySection(&buf, report.Opportunity)
 	renderReduceRecommendationsSection(&buf, reduceRecommendations)
 	renderSwapRecommendationsSection(&buf, swapRecommendations)
 	renderSignalSection(&buf, "继续持有", holdSignals)
@@ -207,6 +208,57 @@ func renderBuyRecommendationsSection(buf *bytes.Buffer, report model.AnalysisRep
 		}
 		if report.DCAPlan != nil && report.DCAPlan.Summary.ReserveAmount > 0 {
 			fmt.Fprintf(buf, "\n- 本月定投预留：`%.0f`\n", report.DCAPlan.Summary.ReserveAmount)
+		}
+	}
+}
+
+func renderOpportunitySection(buf *bytes.Buffer, opportunity *model.OpportunityReport) {
+	if opportunity == nil {
+		return
+	}
+	buf.WriteString("\n## 机会雷达\n\n")
+	fmt.Fprintf(buf, "- 市场状态：`%s`\n", opportunity.Summary.Window)
+	fmt.Fprintf(buf, "- 解读：%s\n", opportunity.Summary.Reason)
+	fmt.Fprintf(buf, "- 组合内可继续加仓：`%d`\n", opportunity.Summary.HoldingOpportunities)
+	fmt.Fprintf(buf, "- 场外稳定候选：`%d`\n", opportunity.Summary.CandidateCount)
+
+	if len(opportunity.Holdings) > 0 {
+		buf.WriteString("\n### 组合内优先加仓\n\n")
+		buf.WriteString("| 优先级 | 基金 | 计划金额 | 当前 | 目标 | 20日 | 60日 | 原因 |\n")
+		buf.WriteString("| ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |\n")
+		for _, item := range opportunity.Holdings {
+			fmt.Fprintf(buf, "| %d | %s | %.0f | %.2f%% | %.2f%% | %.2f%% | %.2f%% | %s |\n",
+				item.Priority,
+				item.FundName,
+				item.PlannedAmount,
+				item.CurrentWeight*100,
+				item.TargetWeight*100,
+				item.Return20D*100,
+				item.Return60D*100,
+				item.Reason,
+			)
+		}
+	}
+
+	if len(opportunity.Candidates) > 0 {
+		buf.WriteString("\n### 场外稳定候选\n\n")
+		buf.WriteString("| 排名 | 主题 | 基金 | 评分 | 20日 | 60日 | 120日 | 原因 |\n")
+		buf.WriteString("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |\n")
+		for _, item := range opportunity.Candidates {
+			reason := item.Reason
+			if item.Retained {
+				reason = "延续保留；" + reason
+			}
+			fmt.Fprintf(buf, "| %d | %s | %s | %d | %.2f%% | %.2f%% | %.2f%% | %s |\n",
+				item.Rank,
+				item.ThemeLabel,
+				item.FundName,
+				item.Score,
+				item.Return20D*100,
+				item.Return60D*100,
+				item.Return120D*100,
+				reason,
+			)
 		}
 	}
 }
@@ -354,6 +406,14 @@ func renderPlaybookSummary(report model.AnalysisReport, recommendations []model.
 		lines = append(lines, fmt.Sprintf("本期存在 %d 笔仓位调整动作，执行前应复核原因。", swapCount+reduceCount))
 	default:
 		lines = append(lines, "本期以持有观察为主，暂无明确交易动作。")
+	}
+	if report.Opportunity != nil {
+		switch {
+		case report.Opportunity.Summary.HoldingOpportunities > 0:
+			lines = append(lines, fmt.Sprintf("当前处于%s，组合内有 %d 只基金可继续加仓。", report.Opportunity.Summary.Window, report.Opportunity.Summary.HoldingOpportunities))
+		case report.Opportunity.Summary.CandidateCount > 0:
+			lines = append(lines, fmt.Sprintf("当前处于%s，可同步跟踪 %d 只场外稳定候选。", report.Opportunity.Summary.Window, report.Opportunity.Summary.CandidateCount))
+		}
 	}
 	if holdCount > 0 {
 		lines = append(lines, fmt.Sprintf("继续持有 %d 只基金，不做主动调出。", holdCount))

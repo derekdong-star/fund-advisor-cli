@@ -759,7 +759,6 @@ func TestDocsPublishRemovesStaleBacktestArtifactsWhenUnavailable(t *testing.T) {
 }
 
 func TestDocsPublishRefreshBuildsMarketPool(t *testing.T) {
-	t.Parallel()
 	originalFetch := fetchForDocsPublish
 	originalAnalyze := analyzeForDocsPublish
 	originalBuild := buildMarketPoolForDocsPublish
@@ -844,6 +843,74 @@ func TestDocsPublishRefreshBuildsMarketPool(t *testing.T) {
 	docsRoot := filepath.Join(dir, "docs", "gitbook")
 	if _, err := os.Stat(filepath.Join(docsRoot, "latest", "market-pool.md")); err != nil {
 		t.Fatalf("expected refreshed market pool page: %v", err)
+	}
+}
+
+func TestDocsPublishRefreshBuildsMarketPoolBeforeAnalyze(t *testing.T) {
+	originalFetch := fetchForDocsPublish
+	originalAnalyze := analyzeForDocsPublish
+	originalBuild := buildMarketPoolForDocsPublish
+	defer func() {
+		fetchForDocsPublish = originalFetch
+		analyzeForDocsPublish = originalAnalyze
+		buildMarketPoolForDocsPublish = originalBuild
+	}()
+
+	steps := make([]string, 0, 3)
+	fetchForDocsPublish = func(ctx context.Context, svc *service.Service, days int) error {
+		steps = append(steps, "fetch")
+		return nil
+	}
+	buildMarketPoolForDocsPublish = func(ctx context.Context, svc *service.Service, days int) (*model.MarketPoolReport, error) {
+		steps = append(steps, "market-pool")
+		now := time.Date(2026, 4, 19, 9, 0, 0, 0, time.UTC)
+		return &model.MarketPoolReport{
+			Summary: model.MarketPoolSummary{RunDate: now},
+		}, nil
+	}
+	analyzeForDocsPublish = func(svc *service.Service) (*model.AnalysisReport, error) {
+		steps = append(steps, "analyze")
+		now := time.Date(2026, 4, 19, 9, 0, 0, 0, time.UTC)
+		return &model.AnalysisReport{
+			Summary: model.AnalysisSummary{
+				PortfolioName: "test",
+				RunDate:       now,
+				ActionCounts:  map[model.Action]int{},
+			},
+			DCAPlan: &model.DCAPlanReport{
+				Summary: model.DCAPlanSummary{
+					PortfolioName: "test",
+					PlanDate:      now,
+					Frequency:     "monthly",
+				},
+			},
+		}, nil
+	}
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	runner := NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	runner = NewRootCmd()
+	runner.SetOut(&stdout)
+	runner.SetErr(&stderr)
+	runner.SetArgs([]string{"docs", "publish", "--config", configPath, "--refresh", "--days", "10"})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("docs publish --refresh Execute() error = %v, stderr=%s", err, stderr.String())
+	}
+
+	if got, want := strings.Join(steps, ","), "fetch,market-pool,analyze"; got != want {
+		t.Fatalf("refresh order = %s, want %s", got, want)
 	}
 }
 

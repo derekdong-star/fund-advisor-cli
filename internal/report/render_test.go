@@ -41,9 +41,45 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 			Summary: model.DCAPlanSummary{ReserveAmount: 1000},
 			Items: []model.DCAPlanItem{{
 				FundName:      "Monthly Core",
+				FundCode:      "000001",
 				PlannedAmount: 4000,
 				Priority:      1,
 				Reason:        "按月定投",
+			}},
+		},
+		Opportunity: &model.OpportunityReport{
+			Summary: model.OpportunitySummary{
+				RunDate:              now,
+				Window:               "顺势窗口",
+				Reason:               "组合内有 2 只基金处于中短期正收益，优先执行已有持仓加仓计划。",
+				HoldingOpportunities: 1,
+				CandidateCount:       1,
+				GeneratedAt:          now,
+			},
+			Holdings: []model.OpportunityHolding{{
+				Priority:      1,
+				FundCode:      "000001",
+				FundName:      "Monthly Core",
+				CurrentWeight: 0.10,
+				TargetWeight:  0.15,
+				PlannedAmount: 4000,
+				Return20D:     0.03,
+				Return60D:     0.08,
+				CreatedAt:     now,
+				Reason:        "按月定投",
+			}},
+			Candidates: []model.OpportunityCandidate{{
+				Rank:       1,
+				ThemeLabel: "A股宽基",
+				FundCode:   "022459",
+				FundName:   "易方达中证A500ETF联接A",
+				Score:      8,
+				Retained:   true,
+				Return20D:  0.02,
+				Return60D:  0.07,
+				Return120D: 0.12,
+				CreatedAt:  now,
+				Reason:     "250日收益 21.00%；指数工具更稳定",
 			}},
 		},
 		Recommendations: []model.TradeRecommendation{{
@@ -77,6 +113,18 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 	if !strings.Contains(rendered, "| Monthly Core | 4000 | 4.00% | 按月定投 |") {
 		t.Fatalf("expected dca row from monthly plan, got %s", rendered)
 	}
+	if !strings.Contains(rendered, "## 机会雷达") {
+		t.Fatalf("expected opportunity section, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "- 市场状态：`顺势窗口`") {
+		t.Fatalf("expected opportunity window summary, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| 1 | Monthly Core | 4000 | 10.00% | 15.00% | 3.00% | 8.00% | 按月定投 |") {
+		t.Fatalf("expected opportunity holding row, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "| 1 | A股宽基 | 易方达中证A500ETF联接A | 8 | 2.00% | 7.00% | 12.00% | 延续保留；250日收益 21.00%；指数工具更稳定 |") {
+		t.Fatalf("expected opportunity candidate row, got %s", rendered)
+	}
 	if strings.Contains(rendered, "## 月度定投快照") {
 		t.Fatalf("did not expect separate monthly dca snapshot, got %s", rendered)
 	}
@@ -97,6 +145,37 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "- 本月定投预留：`1000`") {
 		t.Fatalf("expected monthly dca reserve note, got %s", rendered)
+	}
+}
+
+func TestRenderMarkdownSummarizesOpportunityWithoutBuy(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+	rendered := RenderMarkdown(model.AnalysisReport{
+		Summary: model.AnalysisSummary{
+			PortfolioName:  "test",
+			RunDate:        now,
+			PortfolioValue: 100000,
+			ActionCounts: map[model.Action]int{
+				model.ActionHold: 2,
+			},
+		},
+		Signals: []model.FundSignal{
+			{FundName: "Hold Fund", Action: model.ActionHold, CurrentWeight: 0.10, TargetWeight: 0.10, Return20D: 0.02, Return60D: 0.04, Reason: "继续持有"},
+		},
+		Opportunity: &model.OpportunityReport{
+			Summary: model.OpportunitySummary{
+				RunDate:              now,
+				Window:               "观察窗口",
+				Reason:               "当前组合内没有明确加仓动作，可跟踪场外稳定候选并等待更合适的建仓点。",
+				HoldingOpportunities: 0,
+				CandidateCount:       2,
+				GeneratedAt:          now,
+			},
+		},
+	})
+	if !strings.Contains(rendered, "当前处于观察窗口，可同步跟踪 2 只场外稳定候选。") {
+		t.Fatalf("expected playbook summary to mention opportunity watchlist, got %s", rendered)
 	}
 }
 

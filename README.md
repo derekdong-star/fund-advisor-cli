@@ -13,6 +13,7 @@ Go CLI for daily mutual fund monitoring, NAV collection, and rule-based portfoli
 - writes Markdown or JSON reports to files when needed
 - emits a recommended action list with swap / reduce / buy amounts
 - generates a monthly DCA plan that separates continue-invest from pause-for-risk cases
+- highlights an opportunity radar in the daily report for current add-on targets and stable off-portfolio candidates
 
 ## Commands
 
@@ -68,7 +69,7 @@ Candidate suggestions are generated when a held fund enters `REPLACE_WATCH`, `PA
 
 When multiple weak holdings compete for the same candidate, the recommendation engine assigns that candidate deterministically: `REPLACE_WATCH` first, then `REDUCE`, then `PAUSE_BUY`, and within the same priority it prefers the larger suggested replacement amount.
 
-`report` renders the latest saved analysis snapshot, so it stays consistent with the last `analyze` or `run` execution. Daily reports now include a recommended action list with suggested source fund, target fund, portfolio weight change, and amount.
+`report` renders the latest saved analysis snapshot, so it stays consistent with the last `analyze` or `run` execution. Daily reports include the recommended action list plus an opportunity radar that surfaces which held funds still deserve fresh cash and which stable market-pool names are worth tracking for new entries.
 
 `dca-plan` renders a current contribution plan from live portfolio state. It only considers `dca_enabled` funds, can cap the number of active DCA targets, skips allocations below `min_dca_fund_amount`, and by default pauses monthly contributions for funds currently marked `PAUSE_BUY`, `REDUCE`, or `REPLACE_WATCH`.
 

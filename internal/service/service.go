@@ -205,6 +205,7 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 			reportData.Summary.Notes = append(reportData.Summary.Notes, fmt.Sprintf("LLM enhancement skipped: %v", err))
 		}
 	}
+	reportData.Opportunity = s.buildOpportunityReport(&reportData)
 	if save {
 		runID, err := s.store.SaveAnalysis(reportData)
 		if err != nil {
@@ -267,6 +268,112 @@ func enrichPositionStatesWithLedger(states []model.PositionState, result *ledger
 			states[idx].UnrealizedPnLPct = states[idx].UnrealizedPnL / holding.TotalCost
 		}
 	}
+}
+
+func (s *Service) buildOpportunityReport(reportData *model.AnalysisReport) *model.OpportunityReport {
+	if reportData == nil {
+		return nil
+	}
+	opportunity := &model.OpportunityReport{
+		Summary: model.OpportunitySummary{
+			RunDate:     reportData.Summary.RunDate,
+			GeneratedAt: reportData.Summary.RunDate,
+		},
+	}
+
+	stateByCode := make(map[string]model.PositionState, len(reportData.Position))
+	heldCodes := make(map[string]struct{}, len(reportData.Position))
+	positiveHoldings := 0
+	for _, state := range reportData.Position {
+		stateByCode[state.Position.FundCode] = state
+		heldCodes[state.Position.FundCode] = struct{}{}
+		if state.Return20D > 0 && state.Return60D > 0 {
+			positiveHoldings++
+		}
+	}
+
+	if reportData.DCAPlan != nil {
+		for _, item := range reportData.DCAPlan.Items {
+			state, ok := stateByCode[item.FundCode]
+			if !ok {
+				continue
+			}
+			opportunity.Holdings = append(opportunity.Holdings, model.OpportunityHolding{
+				Priority:      item.Priority,
+				FundCode:      item.FundCode,
+				FundName:      item.FundName,
+				CurrentWeight: item.CurrentWeight,
+				TargetWeight:  item.TargetWeight,
+				PlannedAmount: item.PlannedAmount,
+				Return20D:     state.Return20D,
+				Return60D:     state.Return60D,
+				Return120D:    state.Return120D,
+				CreatedAt:     reportData.Summary.RunDate,
+				Reason:        item.Reason,
+			})
+			if len(opportunity.Holdings) >= 3 {
+				break
+			}
+		}
+	}
+
+	latestPool, err := s.LatestMarketPool()
+	if err == nil && latestPool != nil {
+		for _, item := range latestPool.Items {
+			if _, held := heldCodes[item.FundCode]; held {
+				continue
+			}
+			opportunity.Candidates = append(opportunity.Candidates, model.OpportunityCandidate{
+				Rank:       item.Rank,
+				ThemeLabel: item.ThemeLabel,
+				FundCode:   item.FundCode,
+				FundName:   item.FundName,
+				Score:      item.Score,
+				Retained:   item.Retained,
+				Return20D:  item.Return20D,
+				Return60D:  item.Return60D,
+				Return120D: item.Return120D,
+				CreatedAt:  reportData.Summary.RunDate,
+				Reason:     item.Reason,
+			})
+			if len(opportunity.Candidates) >= 3 {
+				break
+			}
+		}
+	}
+
+	opportunity.Summary.HoldingOpportunities = len(opportunity.Holdings)
+	opportunity.Summary.CandidateCount = len(opportunity.Candidates)
+	opportunity.Summary.Window, opportunity.Summary.Reason = summarizeOpportunityWindow(
+		positiveHoldings,
+		len(reportData.Position),
+		len(opportunity.Holdings),
+		len(opportunity.Candidates),
+	)
+	if opportunity.Summary.HoldingOpportunities == 0 && opportunity.Summary.CandidateCount == 0 {
+		return nil
+	}
+	return opportunity
+}
+
+func summarizeOpportunityWindow(positiveHoldings, totalHoldings, holdingOpportunities, candidateCount int) (string, string) {
+	switch {
+	case holdingOpportunities > 0 && positiveHoldings >= maxInt(2, totalHoldings/2):
+		return "顺势窗口", fmt.Sprintf("组合内有 %d 只基金处于中短期正收益，优先执行已有持仓加仓计划。", positiveHoldings)
+	case holdingOpportunities > 0:
+		return "均衡窗口", "组合内仍有可继续投入的持仓，但不建议脱离目标权重追高。"
+	case candidateCount > 0:
+		return "观察窗口", "当前组合内没有明确加仓动作，可跟踪场外稳定候选并等待更合适的建仓点。"
+	default:
+		return "防守窗口", "当前没有明确的持仓加仓或场外候选机会，优先保留现金。"
+	}
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func (s *Service) RenderCurrent(format string) (string, error) {

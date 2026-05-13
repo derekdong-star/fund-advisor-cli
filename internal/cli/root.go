@@ -676,18 +676,17 @@ func buildDocsPublishInputAfterRefresh(ctx context.Context, svc *service.Service
 	if err := fetchForDocsPublish(ctx, svc, days); err != nil {
 		return docs.PublishInput{}, err
 	}
+	marketPool, marketPoolErr := buildMarketPoolForDocsPublish(ctx, svc, days)
 	analysis, err := analyzeForDocsPublish(svc)
 	if err != nil {
 		return docs.PublishInput{}, err
 	}
 	input := buildDocsPublishInputWithAnalysis(svc, analysis, analysis.DCAPlan)
-	marketPool, err := buildMarketPoolForDocsPublish(ctx, svc, days)
-	if err == nil {
+	if marketPoolErr == nil {
 		input.MarketPool = marketPool
 		input.MarketPoolError = ""
-	} else {
-		input.MarketPool = nil
-		input.MarketPoolError = err.Error()
+	} else if input.MarketPool == nil {
+		input.MarketPoolError = marketPoolErr.Error()
 	}
 	return input, nil
 }

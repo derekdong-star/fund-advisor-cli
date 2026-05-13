@@ -1,5 +1,6 @@
 .gocache/
 .gomodcache/
+.cache/
 data/*.db
 data/*.json
 data/*.db-shm
