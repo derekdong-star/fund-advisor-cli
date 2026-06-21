@@ -114,6 +114,24 @@ func TestLoadAndValidateDefaultConfig(t *testing.T) {
 	if got := cfg.Publishing.GitBook.BacktestRebalanceEvery; got != 20 {
 		t.Fatalf("BacktestRebalanceEvery = %d, want 20", got)
 	}
+	if got := cfg.Publishing.GitBook.MomentumSensitivityDays; got != 1200 {
+		t.Fatalf("MomentumSensitivityDays = %d, want 1200", got)
+	}
+	if got := cfg.Publishing.GitBook.MomentumSensitivitySeeds; got != 5 {
+		t.Fatalf("MomentumSensitivitySeeds = %d, want 5", got)
+	}
+	if got := cfg.Publishing.GitBook.MomentumParameterGridDays; got != 1200 {
+		t.Fatalf("MomentumParameterGridDays = %d, want 1200", got)
+	}
+	if got := cfg.Publishing.GitBook.MomentumParameterGridSeeds; got != 5 {
+		t.Fatalf("MomentumParameterGridSeeds = %d, want 5", got)
+	}
+	if got := cfg.Publishing.GitBook.MomentumStageDays; got != 1200 {
+		t.Fatalf("MomentumStageDays = %d, want 1200", got)
+	}
+	if got := cfg.Publishing.GitBook.MomentumStageSeeds; got != 5 {
+		t.Fatalf("MomentumStageSeeds = %d, want 5", got)
+	}
 	if got := cfg.LLM.Model; got != "gpt-5-mini" {
 		t.Fatalf("LLM model = %s, want gpt-5-mini", got)
 	}
@@ -131,5 +149,33 @@ func TestLoadAndValidateDefaultConfig(t *testing.T) {
 	}
 	if got := cfg.MarketPool.MinReturn120D; got != 0.08 {
 		t.Fatalf("market pool min 120d return = %.2f, want 0.08", got)
+	}
+	if !cfg.MomentumPool.Enabled {
+		t.Fatalf("momentum pool should default to enabled")
+	}
+	if got := cfg.MomentumPool.SelectionCount; got != 3 {
+		t.Fatalf("momentum pool selection count = %d, want 3", got)
+	}
+	weightTotal := cfg.MomentumPool.MomentumWeight20D + cfg.MomentumPool.MomentumWeight60D + cfg.MomentumPool.MomentumWeight120D + cfg.MomentumPool.MomentumWeight250D
+	if weightTotal != 1 {
+		t.Fatalf("momentum pool weight total = %.2f, want 1", weightTotal)
+	}
+	if cfg.MomentumPool.MomentumWeight20D != 0.15 || cfg.MomentumPool.MomentumWeight60D != 0.25 || cfg.MomentumPool.MomentumWeight120D != 0.40 || cfg.MomentumPool.MomentumWeight250D != 0.20 {
+		t.Fatalf("unexpected momentum weights: %+v", cfg.MomentumPool)
+	}
+	if got := len(cfg.MomentumPool.AllowedCompanies); got != 30 {
+		t.Fatalf("momentum pool allowed companies = %d, want 30", got)
+	}
+	if got := cfg.MomentumPool.AllowedCompanies; got[20] != "大成" || got[21] != "华商" || got[26] != "交银施罗德" || got[29] != "国寿安保" {
+		t.Fatalf("unexpected momentum pool allowed companies: %v", got)
+	}
+	if cfg.MomentumPool.CandidateLimit != 0 || cfg.MomentumPool.MinFundSizeYi != 0 || cfg.MomentumPool.MinEstablishedYears != 0 || cfg.MomentumPool.MaxDrawdown120D != 1 {
+		t.Fatalf("momentum visibility should not use candidate, product-size, or age caps: %+v", cfg.MomentumPool)
+	}
+	if got := cfg.MomentumPool.MaxDataAgeDays; got != 7 {
+		t.Fatalf("momentum pool max data age days = %d, want 7", got)
+	}
+	if got := cfg.MomentumPool.ForwardValidationDays; got != 20 {
+		t.Fatalf("momentum pool forward validation days = %d, want 20", got)
 	}
 }

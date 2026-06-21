@@ -26,13 +26,14 @@ go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format table
 go run ./cmd/fundcli report --config ./configs/portfolio.yaml --format markdown --output ./reports/latest.md
 go run ./cmd/fundcli dca-plan --config ./configs/portfolio.yaml --format markdown --output ./reports/dca-plan.md
 go run ./cmd/fundcli market-pool --config ./configs/portfolio.yaml --format markdown --output ./reports/market-pool.md
+go run ./cmd/fundcli momentum-pool --config ./configs/portfolio.yaml --format markdown --output ./reports/momentum-pool.md
 go run ./cmd/fundcli run --config ./configs/portfolio.yaml --format markdown --output ./reports/daily.md
 go run ./cmd/fundcli ledger init --config ./configs/portfolio.yaml
 go run ./cmd/fundcli ledger check --config ./configs/portfolio.yaml
 go run ./cmd/fundcli positions reconcile --config ./configs/portfolio.yaml
 go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml
-go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 180
-go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180
+go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 300
+go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 300
 go run ./cmd/fundcli backtest --config ./configs/portfolio.yaml --days 120 --rebalance-every 20
 ```
 
@@ -52,6 +53,16 @@ Key fields:
 - candidate metadata: supports `expense_ratio`, `fund_size_yi`, `established_years`, `is_index`, `tags`
 - turnover DCA settings: `monthly_dca_amount`, `min_dca_fund_amount`, `dca_frequency`, `max_dca_funds`, `pause_dca_on_risk`
 - stable market pool settings: `market_pool.selection_count`, `max_funds_per_theme`, `min_return_120d`, `min_return_250d`, `max_drawdown_120d`, `retention_score_gap`
+- momentum opportunity settings: `momentum_pool.allowed_companies`, `selection_count`, momentum weights, trend thresholds, and forward-validation thresholds
+- The strong-fund ranking scans only the configured recognizable fund managers; small-company products are excluded, while several products from the same known manager may appear together
+- Keep one deliberate recognizable-manager list; do not expose company-count ranges or old-candidate retention buffers as strategy choices
+- Product size and arbitrary candidate-count caps do not hide strong products from recognizable managers; the scan continues until the 12-item ranking is filled or no more qualified products exist
+- The daily ranking shows the 12 strongest current products. The first 3 are marked as key watch items, and the remaining 9 broaden the opportunity view
+- Ranking weights emphasize persistent 120-day strength while retaining enough 20/60-day responsiveness to surface newly accelerating winners
+- Across five deterministic historical candidate universes, the current ranking's next-period top-decile winner hit rate averaged about 25.7% and never fell below about 21.7%; average next-period return percentile was about 57.5%. This supports opportunity discovery but does not guarantee future profit
+- High-return and high-volatility funds are not penalized for being hot; drawdown does not prevent AI and technology leaders from entering the ranking
+- The ranking refreshes daily. Forward validation affects only whether a small trial is suggested; it never prevents a strong fund from appearing in the ranking
+- Suspended, closed, terminated, and unknown-purchase-status products remain visible when they are strong, but their purchase status prevents them from unlocking a trial position
 - GitBook publishing: `publishing.gitbook.docs_root`, `project_directory`, `generate_homepage`, `generate_summary`, `include_backtest`, `hide_backtest_when_unavailable`, `backtest_days`, `backtest_rebalance_every`, `retain_days`
 - GitBook sync IDs: `publishing.gitbook.organization_id`, `site_id`, `space_id`
 
@@ -122,14 +133,16 @@ The intended workflow is to point GitBook Git Sync at the configured `project_di
 
 Recommended publish flow:
 
-1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 180` for local preview. This writes to `tmp/gitbook-local/` so local checks do not modify tracked GitBook files.
-2. Let GitHub Actions run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180` for the real publish output under `docs/gitbook/`.
+1. Run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.local.yaml --refresh --days 300` for local preview. This writes to `tmp/gitbook-local/` so local checks do not modify tracked GitBook files.
+2. Let GitHub Actions run `go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 300` for the real publish output under `docs/gitbook/`.
+   The 300-day refresh window covers the strategy's 250-day momentum metric and fixed-horizon validation lookback.
 3. The workflow syncs that generated `docs/gitbook/` tree to the `gitbook-publish` branch instead of committing it back to `main`.
-4. In GitBook, connect Git Sync to branch `gitbook-publish` and set the content root to `docs/gitbook`.
-5. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.
+4. The workflow restores `data/fundcli.db`, independently captures and saves the daily market-wide momentum-validation snapshot first, then refreshes portfolio NAV data once with retries and runs the slower docs build with `--skip-fetch`; a successful publish saves the complete final database state. This keeps momentum validation progressing even if a later actual-holding refresh or publishing step fails. Candidate-fund refresh failures are reported and skipped instead of aborting the entire daily run, while actual-holding refresh failures remain hard errors. It also exports a compact daily `docs/gitbook/.momentum-state.json` fallback to the publish branch and restores it only when local momentum history is empty, preventing forward-validation progress from silently resetting if the Actions cache expires.
+5. In GitBook, connect Git Sync to branch `gitbook-publish` and set the content root to `docs/gitbook`.
+6. Keep `organization_id`, `site_id`, and `space_id` in config as deployment metadata for future API-based publishing, but the current implementation only needs Git Sync.
 
 The repository includes a runnable workflow at `.github/workflows/publish-gitbook.yml`. On the first run it creates `gitbook-publish` as a docs-only orphan branch, then syncs only `docs/gitbook` into that branch.
 
-It runs on manual trigger or at `14:00` Asia/Shanghai time on weekdays, intended to generate the same-day decision report after the trading session has enough same-day context. The workflow still publishes with `--refresh`, logs the Asia/Shanghai trigger time, and only pushes updated GitBook artifacts to `gitbook-publish` when the generated content changed.
+It runs on manual trigger or at `21:30` Asia/Shanghai time on weekdays, after public-fund NAV updates are normally available. The workflow still publishes with `--refresh`, logs the Asia/Shanghai trigger time, and only pushes updated GitBook artifacts to `gitbook-publish` when the generated content changed.
 
 If you set `publishing.gitbook.retain_days`, old archive day folders older than that rolling window are pruned during `docs publish`. `0` keeps the full archive.

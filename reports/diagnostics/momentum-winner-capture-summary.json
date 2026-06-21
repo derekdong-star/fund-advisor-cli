@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-06-21T01:58:57.135Z",
+  "method": "Five deterministic candidate universes, 1200-day history, 20-trading-day next-period evaluation. Winner-capture evaluates the visibility ranking independently from execution filters.",
+  "weights": {
+    "return_20d": 0.15,
+    "return_60d": 0.25,
+    "return_120d": 0.4,
+    "return_250d": 0.2
+  },
+  "completed_seeds": 5,
+  "positive_recent_excess_seeds": 5,
+  "winner_capture": {
+    "average_top_decile_hit_rate": 0.2565697919966213,
+    "worst_top_decile_hit_rate": 0.21666666666666667,
+    "average_recent_top_decile_hit_rate": 0.30295031055900623,
+    "worst_recent_top_decile_hit_rate": 0.2826086956521739,
+    "average_future_return_percentile": 0.5746206699743583
+  },
+  "execution_diagnostic": {
+    "average_total_return": 0.8925092490206739,
+    "worst_total_return": 0.5925944269206538,
+    "average_excess_return": 0.5109479831480137,
+    "worst_excess_return": 0.2021826335197816,
+    "worst_recent_excess_return": 0.35414324299809374,
+    "worst_max_drawdown": 0.3548921688329578
+  },
+  "limitations": [
+    "Current-survivor bias remains.",
+    "Historical purchase limits are not reconstructed.",
+    "These results support ranking quality but cannot guarantee future profit."
+  ],
+  "weight_grid": {
+    "profile_count": 9,
+    "current_rank": 1,
+    "leading_label": "正式权重"
+  }
+}

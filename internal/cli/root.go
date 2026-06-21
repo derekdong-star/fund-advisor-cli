@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -33,6 +34,22 @@ var buildMarketPoolForDocsPublish = func(ctx context.Context, svc *service.Servi
 	return svc.BuildMarketPool(ctx, days)
 }
 
+var buildMomentumPoolForDocsPublish = func(ctx context.Context, svc *service.Service, days int) (*model.MomentumPoolReport, error) {
+	return svc.BuildMomentumPool(ctx, days)
+}
+
+var buildMomentumSensitivityForDocsPublish = func(ctx context.Context, svc *service.Service, days, seeds int) (*model.MomentumBacktestSensitivityReport, error) {
+	return svc.MomentumBacktestSensitivity(ctx, days, 0, 0, seeds)
+}
+
+var buildMomentumParameterGridForDocsPublish = func(ctx context.Context, svc *service.Service, days, seeds int) (*model.MomentumBacktestParameterGridReport, error) {
+	return svc.MomentumBacktestParameterGrid(ctx, days, nil, nil, seeds)
+}
+
+var buildMomentumStagesForDocsPublish = func(ctx context.Context, svc *service.Service, days, seeds int) (*model.MomentumBacktestStageReport, error) {
+	return svc.MomentumBacktestStageRobustness(ctx, days, 0, 0, seeds)
+}
+
 func NewRootCmd() *cobra.Command {
 	var configPath string
 	root := &cobra.Command{
@@ -51,11 +68,92 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newLedgerCmd(&configPath))
 	root.AddCommand(newPositionsCmd(&configPath))
 	root.AddCommand(newMarketPoolCmd(&configPath))
+	root.AddCommand(newMomentumPoolCmd(&configPath))
+	root.AddCommand(newMomentumStateCmd(&configPath))
+	root.AddCommand(newMomentumBacktestCmd(&configPath))
+	root.AddCommand(newMomentumBacktestSensitivityCmd(&configPath))
+	root.AddCommand(newMomentumBacktestParameterGridCmd(&configPath))
+	root.AddCommand(newMomentumBacktestStageCmd(&configPath))
+	root.AddCommand(newMomentumBacktestEntryGridCmd(&configPath))
+	root.AddCommand(newMomentumBacktestCorrelationGridCmd(&configPath))
+	root.AddCommand(newMomentumBacktestWeightGridCmd(&configPath))
 	root.AddCommand(newBackfillCmd(&configPath))
 	root.AddCommand(newBacktestCmd(&configPath))
 	root.AddCommand(newDocsCmd(&configPath))
 	root.AddCommand(newLLMCmd(&configPath))
 	return root
+}
+
+func newMomentumStateCmd(configPath *string) *cobra.Command {
+	cmd := &cobra.Command{Use: "momentum-state", Short: "Export or restore momentum validation history"}
+	cmd.AddCommand(newMomentumStateExportCmd(configPath))
+	cmd.AddCommand(newMomentumStateImportCmd(configPath))
+	return cmd
+}
+
+func newMomentumStateExportCmd(configPath *string) *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export momentum validation history as JSON",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			history, err := svc.MomentumPoolHistory()
+			if err != nil {
+				return err
+			}
+			buf, err := json.MarshalIndent(history, "", "  ")
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, string(buf)); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "exported %d momentum runs\n", len(history))
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&output, "output", "", "write momentum state JSON to a file")
+	_ = cmd.MarkFlagRequired("output")
+	return cmd
+}
+
+func newMomentumStateImportCmd(configPath *string) *cobra.Command {
+	var input string
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "Restore momentum validation history into an empty database",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			buf, err := os.ReadFile(input)
+			if err != nil {
+				return err
+			}
+			var history []model.MomentumPoolReport
+			if err := json.Unmarshal(buf, &history); err != nil {
+				return err
+			}
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			restored, err := svc.RestoreMomentumPoolHistory(history)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "restored %d momentum runs\n", restored)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&input, "input", "", "read momentum state JSON from a file")
+	_ = cmd.MarkFlagRequired("input")
+	return cmd
 }
 
 func newInitCmd(configPath *string) *cobra.Command {
@@ -111,6 +209,11 @@ func newFetchCmd(configPath *string) *cobra.Command {
 			defer svc.Close()
 			if err := svc.Fetch(context.Background(), days); err != nil {
 				return err
+			}
+			for _, warning := range svc.FetchWarnings() {
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "warning: %s\n", warning); err != nil {
+					return err
+				}
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), "fetch completed")
 			return err
@@ -419,6 +522,332 @@ func newMarketPoolCmd(configPath *string) *cobra.Command {
 	return cmd
 }
 
+func newMomentumPoolCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	cmd := &cobra.Command{
+		Use:   "momentum-pool",
+		Short: "Find current market-wide momentum leaders",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			pool, err := svc.BuildMomentumPool(cmd.Context(), days)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumPool(*pool, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "momentum pool format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered momentum pool to a file")
+	cmd.Flags().IntVar(&days, "days", 300, "number of recent trading days to evaluate")
+	return cmd
+}
+
+func newMomentumBacktestCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var rebalanceEvery int
+	var selectionCount int
+	var universeSeed uint32
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest",
+		Short: "Run a diagnostic backtest of the momentum selection rules",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktest(cmd.Context(), days, rebalanceEvery, selectionCount, universeSeed)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktest(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "momentum backtest format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered momentum backtest to a file")
+	cmd.Flags().IntVar(&days, "days", 750, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&rebalanceEvery, "rebalance-every", 0, "reselect funds every N trading days; 0 uses momentum_pool.forward_validation_days")
+	cmd.Flags().IntVar(&selectionCount, "selection-count", 0, "number of funds selected each period; 0 uses momentum_pool.selection_count")
+	cmd.Flags().Uint32Var(&universeSeed, "universe-seed", 0, "deterministic seed for the diagnostic candidate universe sample")
+	return cmd
+}
+
+func newMomentumBacktestSensitivityCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var rebalanceEvery int
+	var selectionCount int
+	var seeds int
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest-sensitivity",
+		Short: "Run momentum backtests across deterministic candidate universes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktestSensitivity(cmd.Context(), days, rebalanceEvery, selectionCount, seeds)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktestSensitivity(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "sensitivity report format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered sensitivity report to a file")
+	cmd.Flags().IntVar(&days, "days", 1200, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&rebalanceEvery, "rebalance-every", 0, "reselect funds every N trading days; 0 uses momentum_pool.forward_validation_days")
+	cmd.Flags().IntVar(&selectionCount, "selection-count", 0, "number of funds selected each period; 0 uses momentum_pool.selection_count")
+	cmd.Flags().IntVar(&seeds, "seeds", 5, "number of deterministic candidate-universe samples")
+	return cmd
+}
+
+func newMomentumBacktestParameterGridCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var seeds int
+	var selectionCounts []int
+	var rebalanceEveryValues []int
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest-grid",
+		Short: "Compare nearby momentum parameters across candidate universes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktestParameterGrid(cmd.Context(), days, selectionCounts, rebalanceEveryValues, seeds)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktestParameterGrid(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "parameter grid format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered parameter grid to a file")
+	cmd.Flags().IntVar(&days, "days", 1200, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&seeds, "seeds", 5, "number of deterministic candidate-universe samples per combination")
+	cmd.Flags().IntSliceVar(&selectionCounts, "selection-counts", nil, "fund counts to compare; empty uses current count plus nearby values")
+	cmd.Flags().IntSliceVar(&rebalanceEveryValues, "rebalance-values", nil, "rebalance intervals to compare; empty uses current interval plus nearby values")
+	return cmd
+}
+
+func newMomentumBacktestStageCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var rebalanceEvery int
+	var selectionCount int
+	var seeds int
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest-stages",
+		Short: "Summarize momentum robustness across calendar-year stages",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktestStageRobustness(cmd.Context(), days, rebalanceEvery, selectionCount, seeds)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktestStages(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "stage robustness format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered stage robustness report to a file")
+	cmd.Flags().IntVar(&days, "days", 1200, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&rebalanceEvery, "rebalance-every", 0, "reselect funds every N trading days; 0 uses momentum_pool.forward_validation_days")
+	cmd.Flags().IntVar(&selectionCount, "selection-count", 0, "number of funds selected each period; 0 uses momentum_pool.selection_count")
+	cmd.Flags().IntVar(&seeds, "seeds", 5, "number of deterministic candidate-universe samples")
+	return cmd
+}
+
+func newMomentumBacktestEntryGridCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var seeds int
+	var breadthValues []float64
+	var minReturn20DValues []float64
+	var minReturn60DValues []float64
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest-entry-grid",
+		Short: "Compare momentum entry thresholds using shared historical data",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktestEntryGrid(cmd.Context(), days, seeds, breadthValues, minReturn20DValues, minReturn60DValues)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktestEntryGrid(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "entry grid format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered entry grid to a file")
+	cmd.Flags().IntVar(&days, "days", 1200, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&seeds, "seeds", 5, "number of deterministic candidate-universe samples")
+	cmd.Flags().Float64SliceVar(&breadthValues, "breadth-values", nil, "minimum positive breadth values to compare")
+	cmd.Flags().Float64SliceVar(&minReturn20DValues, "min-return-20d-values", nil, "minimum 20-day returns to compare")
+	cmd.Flags().Float64SliceVar(&minReturn60DValues, "min-return-60d-values", nil, "minimum 60-day returns to compare")
+	return cmd
+}
+
+func newMomentumBacktestCorrelationGridCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var seeds int
+	var correlationValues []float64
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest-correlation-grid",
+		Short: "Compare historical effects of correlation deduplication",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktestCorrelationGrid(cmd.Context(), days, seeds, correlationValues)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktestCorrelationGrid(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "correlation grid format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered correlation grid to a file")
+	cmd.Flags().IntVar(&days, "days", 1200, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&seeds, "seeds", 5, "number of deterministic candidate-universe samples")
+	cmd.Flags().Float64SliceVar(&correlationValues, "correlation-values", nil, "maximum pair correlations to compare; 0 disables deduplication")
+	return cmd
+}
+
+func newMomentumBacktestWeightGridCmd(configPath *string) *cobra.Command {
+	var format string
+	var output string
+	var days int
+	var seeds int
+	cmd := &cobra.Command{
+		Use:   "momentum-backtest-weight-grid",
+		Short: "Compare momentum weights by future-winner capture",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, err := service.New(*configPath)
+			if err != nil {
+				return err
+			}
+			defer svc.Close()
+			result, err := svc.MomentumBacktestWeightGrid(cmd.Context(), days, seeds)
+			if err != nil {
+				return err
+			}
+			rendered, err := report.RenderMomentumBacktestWeightGrid(*result, format)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := writeOutput(output, rendered); err != nil {
+					return err
+				}
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), rendered)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "table", "weight grid format: table|markdown|json")
+	cmd.Flags().StringVar(&output, "output", "", "write rendered weight grid to a file")
+	cmd.Flags().IntVar(&days, "days", 1200, "number of recent trading days to evaluate")
+	cmd.Flags().IntVar(&seeds, "seeds", 5, "number of deterministic candidate-universe samples")
+	return cmd
+}
+
 func newBackfillCmd(configPath *string) *cobra.Command {
 	var days int
 	cmd := &cobra.Command{
@@ -630,11 +1059,15 @@ func newDocsValidateCmd(configPath *string) *cobra.Command {
 
 func newDocsPublishCmd(configPath *string) *cobra.Command {
 	var refresh bool
+	var skipFetch bool
 	var days int
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Export, index, and validate GitBook docs artifacts",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if skipFetch && !refresh {
+				return errors.New("--skip-fetch requires --refresh")
+			}
 			svc, err := service.New(*configPath)
 			if err != nil {
 				return err
@@ -643,7 +1076,7 @@ func newDocsPublishCmd(configPath *string) *cobra.Command {
 
 			var input docs.PublishInput
 			if refresh {
-				input, err = buildDocsPublishInputAfterRefresh(cmd.Context(), svc, days)
+				input, err = buildDocsPublishInputAfterRefresh(cmd.Context(), svc, days, !skipFetch)
 			} else {
 				input, err = buildDocsPublishInput(svc)
 			}
@@ -660,7 +1093,8 @@ func newDocsPublishCmd(configPath *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "fetch fresh NAV data and analyze before publishing docs")
-	cmd.Flags().IntVar(&days, "days", 180, "number of recent trading days to fetch when --refresh is enabled")
+	cmd.Flags().BoolVar(&skipFetch, "skip-fetch", false, "reuse already refreshed NAV data; requires --refresh")
+	cmd.Flags().IntVar(&days, "days", 300, "number of recent trading days to fetch when --refresh is enabled")
 	return cmd
 }
 
@@ -672,11 +1106,29 @@ func buildDocsPublishInput(svc *service.Service) (docs.PublishInput, error) {
 	return buildDocsPublishInputWithAnalysis(svc, analysis, plan), nil
 }
 
-func buildDocsPublishInputAfterRefresh(ctx context.Context, svc *service.Service, days int) (docs.PublishInput, error) {
-	if err := fetchForDocsPublish(ctx, svc, days); err != nil {
-		return docs.PublishInput{}, err
+func buildDocsPublishInputAfterRefresh(ctx context.Context, svc *service.Service, days int, fetch bool) (docs.PublishInput, error) {
+	if fetch {
+		if err := fetchForDocsPublish(ctx, svc, days); err != nil {
+			return docs.PublishInput{}, err
+		}
 	}
 	marketPool, marketPoolErr := buildMarketPoolForDocsPublish(ctx, svc, days)
+	momentumPool, momentumPoolErr := buildMomentumPoolForDocsPublish(ctx, svc, days)
+	var momentumSensitivity *model.MomentumBacktestSensitivityReport
+	var momentumSensitivityErr error
+	if svc.Config().Publishing.GitBook.IncludeMomentumSensitivity {
+		momentumSensitivity, momentumSensitivityErr = buildMomentumSensitivityForDocsPublish(ctx, svc, svc.Config().Publishing.GitBook.MomentumSensitivityDays, svc.Config().Publishing.GitBook.MomentumSensitivitySeeds)
+	}
+	var momentumParameterGrid *model.MomentumBacktestParameterGridReport
+	var momentumParameterGridErr error
+	if svc.Config().Publishing.GitBook.IncludeMomentumParameterGrid {
+		momentumParameterGrid, momentumParameterGridErr = buildMomentumParameterGridForDocsPublish(ctx, svc, svc.Config().Publishing.GitBook.MomentumParameterGridDays, svc.Config().Publishing.GitBook.MomentumParameterGridSeeds)
+	}
+	var momentumStages *model.MomentumBacktestStageReport
+	var momentumStagesErr error
+	if svc.Config().Publishing.GitBook.IncludeMomentumStages {
+		momentumStages, momentumStagesErr = buildMomentumStagesForDocsPublish(ctx, svc, svc.Config().Publishing.GitBook.MomentumStageDays, svc.Config().Publishing.GitBook.MomentumStageSeeds)
+	}
 	analysis, err := analyzeForDocsPublish(svc)
 	if err != nil {
 		return docs.PublishInput{}, err
@@ -687,6 +1139,30 @@ func buildDocsPublishInputAfterRefresh(ctx context.Context, svc *service.Service
 		input.MarketPoolError = ""
 	} else if input.MarketPool == nil {
 		input.MarketPoolError = marketPoolErr.Error()
+	}
+	if momentumPoolErr == nil {
+		input.MomentumPool = momentumPool
+		input.MomentumPoolError = ""
+	} else {
+		input.MomentumPoolError = momentumPoolErr.Error()
+	}
+	if momentumSensitivity != nil && momentumSensitivityErr == nil {
+		input.MomentumSensitivity = momentumSensitivity
+		input.MomentumSensitivityError = ""
+	} else if momentumSensitivityErr != nil {
+		input.MomentumSensitivityError = momentumSensitivityErr.Error()
+	}
+	if momentumParameterGrid != nil && momentumParameterGridErr == nil {
+		input.MomentumParameterGrid = momentumParameterGrid
+		input.MomentumParameterGridError = ""
+	} else if momentumParameterGridErr != nil {
+		input.MomentumParameterGridError = momentumParameterGridErr.Error()
+	}
+	if momentumStages != nil && momentumStagesErr == nil {
+		input.MomentumStages = momentumStages
+		input.MomentumStagesError = ""
+	} else if momentumStagesErr != nil {
+		input.MomentumStagesError = momentumStagesErr.Error()
 	}
 	return input, nil
 }

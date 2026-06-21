@@ -224,6 +224,14 @@ func archiveEntryLabel(slug string) string {
 		return "定投计划"
 	case "market-pool":
 		return "稳定候选池"
+	case "momentum-pool":
+		return "当前强势基金榜"
+	case "momentum-sensitivity":
+		return "动量多样本回测"
+	case "momentum-parameter-grid":
+		return "动量参数稳健性"
+	case "momentum-stages":
+		return "动量跨阶段稳健性"
 	case "backtest":
 		return "策略回测"
 	default:

@@ -1,0 +1,102 @@
+{
+  "summary": {
+    "generated_at": "2026-06-21T02:27:28.674003Z",
+    "days": 1200,
+    "seeds": 5,
+    "combination_count": 3,
+    "current_selection_count": 3,
+    "current_rebalance_every": 20,
+    "current_rank": 1,
+    "leading_selection_count": 3,
+    "leading_rebalance_every": 20,
+    "selection_counts": [
+      3
+    ],
+    "rebalance_every_values": [
+      10,
+      20,
+      30
+    ],
+    "notes": [
+      "参数排名优先比较近期前10%赢家命中率、前10%赢家覆盖率和未来收益百分位，再用执行收益稳健性约束。",
+      "领先参数仅用于检查正式参数是否落在稳健区域，不应仅凭历史排名自动切换策略。"
+    ]
+  },
+  "items": [
+    {
+      "rank": 1,
+      "selection_count": 3,
+      "rebalance_every": 20,
+      "completed_seeds": 5,
+      "positive_total_return_seeds": 5,
+      "positive_excess_return_seeds": 5,
+      "positive_recent_excess_seeds": 5,
+      "average_total_return": 0.9889580640384477,
+      "average_excess_return": 0.6095065724789356,
+      "worst_total_return": 0.4716880969718096,
+      "worst_excess_return": 0.0781548554963245,
+      "worst_recent_excess_return": 0.4759130848918338,
+      "worst_max_drawdown": 0.3670006288092631,
+      "average_future_top_decile_hit_rate": 0.2697684158659769,
+      "worst_future_top_decile_hit_rate": 0.22727272727272718,
+      "average_future_top_decile_capture_rate": 0.06581872734311758,
+      "worst_future_top_decile_capture_rate": 0.04870129870129869,
+      "average_future_top_selection_capture_rate": 0.09335632750266895,
+      "worst_future_top_selection_capture_rate": 0.053030303030303025,
+      "average_future_return_percentile": 0.5819603495005339,
+      "worst_future_return_percentile": 0.5345238095238094,
+      "average_recent_future_top_decile_hit_rate": 0.3183135704874835,
+      "worst_recent_future_top_decile_hit_rate": 0.2878787878787879
+    },
+    {
+      "rank": 2,
+      "selection_count": 3,
+      "rebalance_every": 30,
+      "completed_seeds": 5,
+      "positive_total_return_seeds": 5,
+      "positive_excess_return_seeds": 5,
+      "positive_recent_excess_seeds": 5,
+      "average_total_return": 0.7544605407029596,
+      "average_excess_return": 0.3525710835247151,
+      "worst_total_return": 0.39041144848018483,
+      "worst_excess_return": 0.010408210811270857,
+      "worst_recent_excess_return": 0.05022584030068411,
+      "worst_max_drawdown": 0.2502981505969275,
+      "average_future_top_decile_hit_rate": 0.24250076020190958,
+      "worst_future_top_decile_hit_rate": 0.20987654320987653,
+      "average_future_top_decile_capture_rate": 0.05890105211944291,
+      "worst_future_top_decile_capture_rate": 0.05172413793103447,
+      "average_future_top_selection_capture_rate": 0.0863692756796205,
+      "worst_future_top_selection_capture_rate": 0.057471264367816084,
+      "average_future_return_percentile": 0.5542108507163916,
+      "worst_future_return_percentile": 0.4913165266106443,
+      "average_recent_future_top_decile_hit_rate": 0.29269841269841274,
+      "worst_recent_future_top_decile_hit_rate": 0.24444444444444446
+    },
+    {
+      "rank": 3,
+      "selection_count": 3,
+      "rebalance_every": 10,
+      "completed_seeds": 5,
+      "positive_total_return_seeds": 5,
+      "positive_excess_return_seeds": 5,
+      "positive_recent_excess_seeds": 5,
+      "average_total_return": 0.6787738286775917,
+      "average_excess_return": 0.32126745049970107,
+      "worst_total_return": 0.37952813255633955,
+      "worst_excess_return": 0.0610756350778503,
+      "worst_recent_excess_return": 0.229570094476085,
+      "worst_max_drawdown": 0.33324157789238085,
+      "average_future_top_decile_hit_rate": 0.25171233566657963,
+      "worst_future_top_decile_hit_rate": 0.22727272727272732,
+      "average_future_top_decile_capture_rate": 0.06130470729326828,
+      "worst_future_top_decile_capture_rate": 0.04870129870129871,
+      "average_future_top_selection_capture_rate": 0.08973868006357513,
+      "worst_future_top_selection_capture_rate": 0.0682730923694779,
+      "average_future_return_percentile": 0.5452927142718857,
+      "worst_future_return_percentile": 0.4985930735930735,
+      "average_recent_future_top_decile_hit_rate": 0.27101972101972105,
+      "worst_recent_future_top_decile_hit_rate": 0.23703703703703707
+    }
+  ]
+}

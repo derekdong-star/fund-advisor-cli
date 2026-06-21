@@ -3,8 +3,8 @@ name: publish-gitbook
 on:
   workflow_dispatch:
   schedule:
-    # 06:00 UTC = 14:00 Asia/Shanghai on weekdays.
-    - cron: '0 6 * * 1-5'
+    # 13:30 UTC = 21:30 Asia/Shanghai, after public fund NAV updates.
+    - cron: '30 13 * * 1-5'
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       FUND_ADVISOR_LLM_API_KEY: ${{ secrets.FUND_ADVISOR_LLM_API_KEY }}
     steps:
@@ -38,8 +38,44 @@ jobs:
       - name: Show trigger time in Asia/Shanghai
         run: TZ=Asia/Shanghai date '+triggered at %Y-%m-%d %H:%M:%S %Z'
 
+      - name: Restore advisor state
+        uses: actions/cache/restore@v4
+        with:
+          path: data/fundcli.db
+          key: fundcli-state-${{ github.run_id }}-${{ github.run_attempt }}-final
+          restore-keys: |
+            fundcli-state-
+
+      - name: Restore momentum history fallback
+        run: |
+          git fetch origin "${PUBLISH_BRANCH}" || true
+          if git show "origin/${PUBLISH_BRANCH}:docs/gitbook/.momentum-state.json" > /tmp/momentum-state.json 2>/dev/null; then
+            go run ./cmd/fundcli momentum-state import --config ./configs/portfolio.yaml --input /tmp/momentum-state.json
+          fi
+
+      - name: Capture daily momentum validation
+        run: go run ./cmd/fundcli momentum-pool --config ./configs/portfolio.yaml --days 300 --format json --output /tmp/momentum-pool.json >/dev/null
+
+      - name: Save daily momentum state
+        uses: actions/cache/save@v4
+        with:
+          path: data/fundcli.db
+          key: fundcli-state-${{ github.run_id }}-${{ github.run_attempt }}-momentum
+
+      - name: Refresh portfolio NAV data
+        run: go run ./cmd/fundcli fetch --config ./configs/portfolio.yaml --days 300
+
       - name: Publish GitBook docs
-        run: go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --days 180
+        run: go run ./cmd/fundcli docs publish --config ./configs/portfolio.yaml --refresh --skip-fetch --days 300
+
+      - name: Save final advisor state
+        uses: actions/cache/save@v4
+        with:
+          path: data/fundcli.db
+          key: fundcli-state-${{ github.run_id }}-${{ github.run_attempt }}-final
+
+      - name: Export momentum history fallback
+        run: go run ./cmd/fundcli momentum-state export --config ./configs/portfolio.yaml --output docs/gitbook/.momentum-state.json
 
       - name: Show generated docs status
         run: git status --short docs/gitbook

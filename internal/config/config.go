@@ -5,21 +5,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Portfolio  PortfolioConfig  `yaml:"portfolio"`
-	Storage    StorageConfig    `yaml:"storage"`
-	DataSource DataSourceConfig `yaml:"data_source"`
-	Strategy   StrategyConfig   `yaml:"strategy"`
-	MarketPool MarketPoolConfig `yaml:"market_pool"`
-	Publishing PublishingConfig `yaml:"publishing"`
-	LLM        LLMConfig        `yaml:"llm"`
-	Funds      []FundConfig     `yaml:"funds"`
-	Candidates []FundConfig     `yaml:"candidates"`
+	Portfolio    PortfolioConfig    `yaml:"portfolio"`
+	Storage      StorageConfig      `yaml:"storage"`
+	DataSource   DataSourceConfig   `yaml:"data_source"`
+	Strategy     StrategyConfig     `yaml:"strategy"`
+	MarketPool   MarketPoolConfig   `yaml:"market_pool"`
+	MomentumPool MomentumPoolConfig `yaml:"momentum_pool"`
+	Publishing   PublishingConfig   `yaml:"publishing"`
+	LLM          LLMConfig          `yaml:"llm"`
+	Funds        []FundConfig       `yaml:"funds"`
+	Candidates   []FundConfig       `yaml:"candidates"`
 
 	configPath string
 }
@@ -58,29 +60,38 @@ type LLMConfig struct {
 }
 
 type GitBookPublishConfig struct {
-	Enabled                     bool   `yaml:"enabled"`
-	Mode                        string `yaml:"mode"`
-	DocsRoot                    string `yaml:"docs_root"`
-	ProjectDirectory            string `yaml:"project_directory"`
-	GenerateHomepage            bool   `yaml:"generate_homepage"`
-	GenerateSummary             bool   `yaml:"generate_summary"`
-	IncludeDaily                bool   `yaml:"include_daily"`
-	IncludeDCAPlan              bool   `yaml:"include_dca_plan"`
-	IncludeBacktest             bool   `yaml:"include_backtest"`
-	HideBacktestWhenUnavailable bool   `yaml:"hide_backtest_when_unavailable"`
-	BacktestDays                int    `yaml:"backtest_days"`
-	BacktestRebalanceEvery      int    `yaml:"backtest_rebalance_every"`
-	ArchiveByRunDate            bool   `yaml:"archive_by_run_date"`
-	OverwriteLatest             bool   `yaml:"overwrite_latest"`
-	RetainDays                  int    `yaml:"retain_days"`
-	SiteTitle                   string `yaml:"site_title"`
-	SiteDescription             string `yaml:"site_description"`
-	StrategyOverviewPath        string `yaml:"strategy_overview_path"`
-	RiskDisclosurePath          string `yaml:"risk_disclosure_path"`
-	Visibility                  string `yaml:"visibility"`
-	OrganizationID              string `yaml:"organization_id"`
-	SiteID                      string `yaml:"site_id"`
-	SpaceID                     string `yaml:"space_id"`
+	Enabled                      bool   `yaml:"enabled"`
+	Mode                         string `yaml:"mode"`
+	DocsRoot                     string `yaml:"docs_root"`
+	ProjectDirectory             string `yaml:"project_directory"`
+	GenerateHomepage             bool   `yaml:"generate_homepage"`
+	GenerateSummary              bool   `yaml:"generate_summary"`
+	IncludeDaily                 bool   `yaml:"include_daily"`
+	IncludeDCAPlan               bool   `yaml:"include_dca_plan"`
+	IncludeBacktest              bool   `yaml:"include_backtest"`
+	IncludeMomentumSensitivity   bool   `yaml:"include_momentum_sensitivity"`
+	IncludeMomentumParameterGrid bool   `yaml:"include_momentum_parameter_grid"`
+	IncludeMomentumStages        bool   `yaml:"include_momentum_stages"`
+	HideBacktestWhenUnavailable  bool   `yaml:"hide_backtest_when_unavailable"`
+	BacktestDays                 int    `yaml:"backtest_days"`
+	BacktestRebalanceEvery       int    `yaml:"backtest_rebalance_every"`
+	MomentumSensitivityDays      int    `yaml:"momentum_sensitivity_days"`
+	MomentumSensitivitySeeds     int    `yaml:"momentum_sensitivity_seeds"`
+	MomentumParameterGridDays    int    `yaml:"momentum_parameter_grid_days"`
+	MomentumParameterGridSeeds   int    `yaml:"momentum_parameter_grid_seeds"`
+	MomentumStageDays            int    `yaml:"momentum_stage_days"`
+	MomentumStageSeeds           int    `yaml:"momentum_stage_seeds"`
+	ArchiveByRunDate             bool   `yaml:"archive_by_run_date"`
+	OverwriteLatest              bool   `yaml:"overwrite_latest"`
+	RetainDays                   int    `yaml:"retain_days"`
+	SiteTitle                    string `yaml:"site_title"`
+	SiteDescription              string `yaml:"site_description"`
+	StrategyOverviewPath         string `yaml:"strategy_overview_path"`
+	RiskDisclosurePath           string `yaml:"risk_disclosure_path"`
+	Visibility                   string `yaml:"visibility"`
+	OrganizationID               string `yaml:"organization_id"`
+	SiteID                       string `yaml:"site_id"`
+	SpaceID                      string `yaml:"space_id"`
 }
 
 type StrategyConfig struct {
@@ -144,6 +155,34 @@ type MarketPoolConfig struct {
 	MaxDrawdown120D     float64 `yaml:"max_drawdown_120d"`
 	MinScore            int     `yaml:"min_score"`
 	RetentionScoreGap   int     `yaml:"retention_score_gap"`
+}
+
+type MomentumPoolConfig struct {
+	Enabled                 bool     `yaml:"enabled"`
+	SelectionCount          int      `yaml:"selection_count"`
+	MinSelectionCount       int      `yaml:"min_selection_count"`
+	AllowedCompanies        []string `yaml:"allowed_companies"`
+	CandidateLimit          int      `yaml:"candidate_limit"`
+	MinFundSizeYi           float64  `yaml:"min_fund_size_yi"`
+	MinEstablishedYears     float64  `yaml:"min_established_years"`
+	MinMomentumScore        float64  `yaml:"min_momentum_score"`
+	MomentumWeight20D       float64  `yaml:"momentum_weight_20d"`
+	MomentumWeight60D       float64  `yaml:"momentum_weight_60d"`
+	MomentumWeight120D      float64  `yaml:"momentum_weight_120d"`
+	MomentumWeight250D      float64  `yaml:"momentum_weight_250d"`
+	MinReturn20D            float64  `yaml:"min_return_20d"`
+	MinReturn60D            float64  `yaml:"min_return_60d"`
+	MinReturn120D           float64  `yaml:"min_return_120d"`
+	MaxDrawdown120D         float64  `yaml:"max_drawdown_120d"`
+	MinPositiveBreadth      float64  `yaml:"min_positive_breadth"`
+	ForwardValidationDays   int      `yaml:"forward_validation_days"`
+	MinForwardAverageReturn float64  `yaml:"min_forward_average_return"`
+	MaxTrialPortfolioWeight float64  `yaml:"max_trial_portfolio_weight"`
+	MaxDataAgeDays          int      `yaml:"max_data_age_days"`
+}
+
+func defaultMomentumCompanies() []string {
+	return []string{"易方达", "华夏", "广发", "富国", "南方", "嘉实", "汇添富", "华泰柏瑞", "博时", "景顺长城", "招商", "鹏华", "国泰", "华安", "工银瑞信", "永赢", "中欧", "天弘", "中银", "兴证全球", "大成", "华商", "银华", "平安", "兴业", "海富通", "交银施罗德", "华宝", "建信", "国寿安保"}
 }
 
 type FundConfig struct {
@@ -227,13 +266,29 @@ func (c *Config) Validate() error {
 	if c.MarketPool.SelectionCount < 0 || c.MarketPool.MaxFundsPerTheme < 0 || c.MarketPool.MinFundSizeYi < 0 || c.MarketPool.MinEstablishedYears < 0 || c.MarketPool.MaxDrawdown120D < 0 || c.MarketPool.MinScore < 0 || c.MarketPool.RetentionScoreGap < 0 {
 		return errors.New("market_pool thresholds must be non-negative")
 	}
+	if c.MomentumPool.SelectionCount < 0 || c.MomentumPool.MinSelectionCount < 0 || c.MomentumPool.CandidateLimit < 0 || c.MomentumPool.MinFundSizeYi < 0 || c.MomentumPool.MinEstablishedYears < 0 || c.MomentumPool.MinMomentumScore < 0 || c.MomentumPool.MaxDrawdown120D < 0 || c.MomentumPool.MinPositiveBreadth < 0 || c.MomentumPool.MinPositiveBreadth > 1 || c.MomentumPool.ForwardValidationDays < 0 || c.MomentumPool.MinForwardAverageReturn < 0 || c.MomentumPool.MaxTrialPortfolioWeight < 0 || c.MomentumPool.MaxTrialPortfolioWeight > 1 || c.MomentumPool.MaxDataAgeDays < 0 {
+		return errors.New("momentum_pool thresholds must be non-negative")
+	}
+	if c.MomentumPool.MinSelectionCount > c.MomentumPool.SelectionCount {
+		return errors.New("momentum_pool.min_selection_count must not exceed selection_count")
+	}
+	for _, company := range c.MomentumPool.AllowedCompanies {
+		company = strings.TrimSpace(company)
+		if company == "" {
+			return errors.New("momentum_pool.allowed_companies must not contain empty values")
+		}
+	}
+	momentumWeightTotal := c.MomentumPool.MomentumWeight20D + c.MomentumPool.MomentumWeight60D + c.MomentumPool.MomentumWeight120D + c.MomentumPool.MomentumWeight250D
+	if momentumWeightTotal < 0.999 || momentumWeightTotal > 1.001 {
+		return fmt.Errorf("momentum_pool momentum weights must sum to 1.0, got %.4f", momentumWeightTotal)
+	}
 	if c.Publishing.GitBook.RetainDays < 0 {
 		return errors.New("publishing.gitbook.retain_days must be non-negative")
 	}
 	if c.LLM.TimeoutSeconds < 0 || c.LLM.MaxCandidatesPerCall < 0 {
 		return errors.New("llm settings must be non-negative")
 	}
-	if c.Publishing.GitBook.BacktestDays < 0 || c.Publishing.GitBook.BacktestRebalanceEvery < 0 {
+	if c.Publishing.GitBook.BacktestDays < 0 || c.Publishing.GitBook.BacktestRebalanceEvery < 0 || c.Publishing.GitBook.MomentumSensitivityDays < 0 || c.Publishing.GitBook.MomentumSensitivitySeeds < 0 || c.Publishing.GitBook.MomentumParameterGridDays < 0 || c.Publishing.GitBook.MomentumParameterGridSeeds < 0 || c.Publishing.GitBook.MomentumStageDays < 0 || c.Publishing.GitBook.MomentumStageSeeds < 0 {
 		return errors.New("publishing.gitbook backtest settings must be non-negative")
 	}
 	if c.Publishing.GitBook.Enabled {
@@ -268,6 +323,9 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) applyDefaults() {
+	if reflect.DeepEqual(c.MomentumPool, MomentumPoolConfig{}) {
+		c.MomentumPool.Enabled = true
+	}
 	if strings.TrimSpace(c.LLM.Provider) == "" {
 		c.LLM.Provider = "openai"
 	}
@@ -325,6 +383,42 @@ func (c *Config) applyDefaults() {
 	if c.MarketPool.RetentionScoreGap == 0 {
 		c.MarketPool.RetentionScoreGap = 2
 	}
+	if c.MomentumPool.SelectionCount == 0 {
+		c.MomentumPool.SelectionCount = 4
+	}
+	if c.MomentumPool.MinSelectionCount == 0 {
+		c.MomentumPool.MinSelectionCount = 4
+	}
+	if len(c.MomentumPool.AllowedCompanies) == 0 {
+		c.MomentumPool.AllowedCompanies = defaultMomentumCompanies()
+	}
+	if c.MomentumPool.MinMomentumScore == 0 {
+		c.MomentumPool.MinMomentumScore = 80
+	}
+	if c.MomentumPool.MomentumWeight20D+c.MomentumPool.MomentumWeight60D+c.MomentumPool.MomentumWeight120D+c.MomentumPool.MomentumWeight250D == 0 {
+		c.MomentumPool.MomentumWeight20D = 0.15
+		c.MomentumPool.MomentumWeight60D = 0.25
+		c.MomentumPool.MomentumWeight120D = 0.40
+		c.MomentumPool.MomentumWeight250D = 0.20
+	}
+	if c.MomentumPool.MaxDrawdown120D == 0 {
+		c.MomentumPool.MaxDrawdown120D = 1
+	}
+	if c.MomentumPool.MinPositiveBreadth == 0 {
+		c.MomentumPool.MinPositiveBreadth = 0.20
+	}
+	if c.MomentumPool.ForwardValidationDays == 0 {
+		c.MomentumPool.ForwardValidationDays = 20
+	}
+	if c.MomentumPool.MinForwardAverageReturn == 0 {
+		c.MomentumPool.MinForwardAverageReturn = 0.10
+	}
+	if c.MomentumPool.MaxTrialPortfolioWeight == 0 {
+		c.MomentumPool.MaxTrialPortfolioWeight = 0.05
+	}
+	if c.MomentumPool.MaxDataAgeDays == 0 {
+		c.MomentumPool.MaxDataAgeDays = 7
+	}
 	if strings.TrimSpace(c.Publishing.GitBook.Mode) == "" {
 		c.Publishing.GitBook.Mode = "git-sync"
 	}
@@ -342,6 +436,24 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Publishing.GitBook.BacktestRebalanceEvery == 0 {
 		c.Publishing.GitBook.BacktestRebalanceEvery = 20
+	}
+	if c.Publishing.GitBook.MomentumSensitivityDays == 0 {
+		c.Publishing.GitBook.MomentumSensitivityDays = 1200
+	}
+	if c.Publishing.GitBook.MomentumSensitivitySeeds == 0 {
+		c.Publishing.GitBook.MomentumSensitivitySeeds = 5
+	}
+	if c.Publishing.GitBook.MomentumParameterGridDays == 0 {
+		c.Publishing.GitBook.MomentumParameterGridDays = 1200
+	}
+	if c.Publishing.GitBook.MomentumParameterGridSeeds == 0 {
+		c.Publishing.GitBook.MomentumParameterGridSeeds = 5
+	}
+	if c.Publishing.GitBook.MomentumStageDays == 0 {
+		c.Publishing.GitBook.MomentumStageDays = 1200
+	}
+	if c.Publishing.GitBook.MomentumStageSeeds == 0 {
+		c.Publishing.GitBook.MomentumStageSeeds = 5
 	}
 	if strings.TrimSpace(c.Publishing.GitBook.StrategyOverviewPath) == "" {
 		c.Publishing.GitBook.StrategyOverviewPath = filepath.ToSlash(filepath.Join("strategy", "overview.md"))
@@ -397,7 +509,7 @@ func Default() *Config {
 	return &Config{
 		Portfolio:  PortfolioConfig{Name: "dhw-fund-portfolio", Currency: "CNY", Benchmark: "custom-mix"},
 		Storage:    StorageConfig{Driver: "sqlite", DSN: "../data/fundcli.db"},
-		DataSource: DataSourceConfig{Provider: "eastmoney", TushareTokenEnv: "TUSHARE_TOKEN", RequestTimeoutSeconds: 15},
+		DataSource: DataSourceConfig{Provider: "eastmoney", TushareTokenEnv: "TUSHARE_TOKEN", RequestTimeoutSeconds: 30},
 		Strategy: StrategyConfig{
 			Rebalance:     RebalanceConfig{RelativeDriftThreshold: 0.25, AbsoluteDriftThreshold: 0.05},
 			HoldingHealth: HoldingHealthConfig{Underperform60DThreshold: -0.08, ReviewScoreThreshold: 2, ReplaceScoreThreshold: 3},
@@ -406,29 +518,39 @@ func Default() *Config {
 			CandidatePool: CandidatePoolConfig{MinFundSizeYi: 8, MinEstablishedYears: 1, MaxExpenseRatio: 0.008, CoreRequireIndex: true, PreferBenchmarkMatch: true},
 			Turnover:      TurnoverConfig{Mode: "low_turnover", MinSwapScore: 7, MaxProtectedReduceWeight: 0.22, MonthlyDCAAmount: 5000, MinDCAFundAmount: 1000, DCAFrequency: "monthly", MaxDCAFunds: 3, PauseDCAOnRisk: boolPtr(true), PreferDCA: true},
 		},
-		MarketPool: MarketPoolConfig{Enabled: true, SelectionCount: 6, MaxFundsPerTheme: 12, MinFundSizeYi: 0, MinEstablishedYears: 1, MinReturn120D: 0.08, MinReturn250D: 0.12, MaxDrawdown120D: 0.18, MinScore: 6, RetentionScoreGap: 2},
+		MarketPool:   MarketPoolConfig{Enabled: true, SelectionCount: 6, MaxFundsPerTheme: 12, MinFundSizeYi: 0, MinEstablishedYears: 1, MinReturn120D: 0.08, MinReturn250D: 0.12, MaxDrawdown120D: 0.18, MinScore: 6, RetentionScoreGap: 2},
+		MomentumPool: MomentumPoolConfig{Enabled: true, SelectionCount: 3, MinSelectionCount: 3, AllowedCompanies: defaultMomentumCompanies(), MinMomentumScore: 80, MomentumWeight20D: 0.15, MomentumWeight60D: 0.25, MomentumWeight120D: 0.40, MomentumWeight250D: 0.20, MinReturn20D: -0.15, MinReturn60D: 0, MinReturn120D: 0, MaxDrawdown120D: 1, MinPositiveBreadth: 0.20, ForwardValidationDays: 20, MinForwardAverageReturn: 0.10, MaxTrialPortfolioWeight: 0.05, MaxDataAgeDays: 7},
 		Publishing: PublishingConfig{
 			GitBook: GitBookPublishConfig{
-				Enabled:                     true,
-				Mode:                        "git-sync",
-				DocsRoot:                    filepath.Join("..", "docs", "gitbook"),
-				ProjectDirectory:            filepath.ToSlash(filepath.Join("docs", "gitbook")),
-				GenerateHomepage:            true,
-				GenerateSummary:             true,
-				IncludeDaily:                true,
-				IncludeDCAPlan:              true,
-				IncludeBacktest:             false,
-				HideBacktestWhenUnavailable: true,
-				BacktestDays:                120,
-				BacktestRebalanceEvery:      20,
-				ArchiveByRunDate:            true,
-				OverwriteLatest:             true,
-				RetainDays:                  0,
-				SiteTitle:                   "Derek 基金投资顾问",
-				SiteDescription:             "低换手、长期持有、定投优先的基金组合跟踪报告",
-				StrategyOverviewPath:        filepath.ToSlash(filepath.Join("strategy", "overview.md")),
-				RiskDisclosurePath:          filepath.ToSlash(filepath.Join("about", "risk.md")),
-				Visibility:                  "public",
+				Enabled:                      true,
+				Mode:                         "git-sync",
+				DocsRoot:                     filepath.Join("..", "docs", "gitbook"),
+				ProjectDirectory:             filepath.ToSlash(filepath.Join("docs", "gitbook")),
+				GenerateHomepage:             true,
+				GenerateSummary:              true,
+				IncludeDaily:                 true,
+				IncludeDCAPlan:               true,
+				IncludeBacktest:              false,
+				IncludeMomentumSensitivity:   false,
+				IncludeMomentumParameterGrid: false,
+				IncludeMomentumStages:        false,
+				HideBacktestWhenUnavailable:  true,
+				BacktestDays:                 120,
+				BacktestRebalanceEvery:       20,
+				MomentumSensitivityDays:      1200,
+				MomentumSensitivitySeeds:     5,
+				MomentumParameterGridDays:    1200,
+				MomentumParameterGridSeeds:   5,
+				MomentumStageDays:            1200,
+				MomentumStageSeeds:           5,
+				ArchiveByRunDate:             true,
+				OverwriteLatest:              true,
+				RetainDays:                   0,
+				SiteTitle:                    "Derek 基金投资顾问",
+				SiteDescription:              "低换手、长期持有、定投优先的基金组合跟踪报告",
+				StrategyOverviewPath:         filepath.ToSlash(filepath.Join("strategy", "overview.md")),
+				RiskDisclosurePath:           filepath.ToSlash(filepath.Join("about", "risk.md")),
+				Visibility:                   "public",
 			},
 		},
 		LLM: LLMConfig{

@@ -252,7 +252,6 @@ func TestAnalyzeProtectsLongTermConvictionHoldings(t *testing.T) {
 	}
 }
 
-
 func TestAnalyzeLowTurnoverSuppressesRoutineReduce(t *testing.T) {
 	t.Parallel()
 	cfg := config.Default()
@@ -264,7 +263,7 @@ func TestAnalyzeLowTurnoverSuppressesRoutineReduce(t *testing.T) {
 	makeHistory := func(values []float64) []model.FundSnapshot {
 		history := make([]model.FundSnapshot, 0, len(values))
 		for idx, nav := range values {
-			history = append(history, model.FundSnapshot{TradeDate: now.AddDate(0, 0, -(len(values)-1-idx)), NAV: nav, DayChangePct: 0.01})
+			history = append(history, model.FundSnapshot{TradeDate: now.AddDate(0, 0, -(len(values) - 1 - idx)), NAV: nav, DayChangePct: 0.01})
 		}
 		return history
 	}
@@ -506,5 +505,18 @@ func TestBuildDCAPlanReservesBudgetWhenBelowMinimumAmount(t *testing.T) {
 	}
 	if plan.Summary.ReserveAmount != 500 {
 		t.Fatalf("reserve amount = %.2f, want 500", plan.Summary.ReserveAmount)
+	}
+}
+
+func TestRollingReturnUsesAccumulatedNAVAcrossDistribution(t *testing.T) {
+	history := []model.FundSnapshot{
+		{NAV: 2, AccNAV: 2},
+		{NAV: 1.1, AccNAV: 2.1},
+	}
+
+	result := rollingReturn(history, 20)
+
+	if result < 0.049999 || result > 0.050001 {
+		t.Fatalf("rollingReturn() = %.4f, want 0.0500", result)
 	}
 }

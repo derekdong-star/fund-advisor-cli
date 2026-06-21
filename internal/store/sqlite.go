@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS market_pool_runs (
 	created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS momentum_pool_runs (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	run_date TEXT NOT NULL,
+	summary_json TEXT NOT NULL,
+	report_json TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fund_signals (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	analysis_run_id INTEGER NOT NULL,
@@ -527,6 +535,102 @@ func (s *Store) LatestMarketPool() (*model.MarketPoolReport, error) {
 		_ = json.Unmarshal([]byte(summaryJSON), &report.Summary)
 	}
 	return &report, nil
+}
+
+func (s *Store) SaveMomentumPool(report model.MomentumPoolReport) (int64, error) {
+	summaryJSON, err := json.Marshal(report.Summary)
+	if err != nil {
+		return 0, err
+	}
+	reportJSON, err := json.Marshal(report)
+	if err != nil {
+		return 0, err
+	}
+	result, err := s.db.Exec(`
+INSERT INTO momentum_pool_runs (run_date, summary_json, report_json, created_at)
+VALUES (?, ?, ?, ?)
+`, report.Summary.RunDate.Format(time.RFC3339), string(summaryJSON), string(reportJSON), time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) LatestMomentumPool() (*model.MomentumPoolReport, error) {
+	row := s.db.QueryRow(`SELECT report_json FROM momentum_pool_runs ORDER BY id DESC LIMIT 1`)
+	var reportJSON string
+	if err := row.Scan(&reportJSON); err != nil {
+		return nil, err
+	}
+	var report model.MomentumPoolReport
+	if err := json.Unmarshal([]byte(reportJSON), &report); err != nil {
+		return nil, err
+	}
+	return &report, nil
+}
+
+func (s *Store) LatestSelectedMomentumPool() (*model.MomentumPoolReport, error) {
+	rows, err := s.db.Query(`SELECT report_json FROM momentum_pool_runs ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var reportJSON string
+		if err := rows.Scan(&reportJSON); err != nil {
+			return nil, err
+		}
+		var report model.MomentumPoolReport
+		if err := json.Unmarshal([]byte(reportJSON), &report); err != nil {
+			return nil, err
+		}
+		if len(report.Items) > 0 {
+			return &report, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (s *Store) MomentumPoolHistory() ([]model.MomentumPoolReport, error) {
+	rows, err := s.db.Query(`SELECT report_json FROM momentum_pool_runs ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	reports := make([]model.MomentumPoolReport, 0)
+	for rows.Next() {
+		var reportJSON string
+		if err := rows.Scan(&reportJSON); err != nil {
+			return nil, err
+		}
+		var report model.MomentumPoolReport
+		if err := json.Unmarshal([]byte(reportJSON), &report); err != nil {
+			return nil, err
+		}
+		reports = append(reports, report)
+	}
+	return reports, rows.Err()
+}
+
+func (s *Store) RestoreMomentumPoolHistory(reports []model.MomentumPoolReport) (int, error) {
+	history, err := s.MomentumPoolHistory()
+	if err != nil {
+		return 0, err
+	}
+	if len(history) > 0 {
+		return 0, nil
+	}
+	restored := 0
+	for _, report := range reports {
+		if _, err := s.SaveMomentumPool(report); err != nil {
+			return restored, err
+		}
+		restored++
+	}
+	return restored, nil
 }
 
 func (s *Store) loadLegacyAnalysis(runID int64, summaryJSON string) (*model.AnalysisReport, error) {

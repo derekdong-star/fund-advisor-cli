@@ -55,6 +55,17 @@ type marketAssetAllocation struct {
 	} `json:"series"`
 }
 
+type FundPurchaseStatus struct {
+	Code            string
+	PurchaseStatus  string
+	MinimumPurchase float64
+	DailyLimit      float64
+}
+
+type purchaseStatusPayload struct {
+	Datas [][]string `json:"datas"`
+}
+
 func (f *EastmoneyFetcher) SearchAllFunds(ctx context.Context) ([]model.MarketSearchFund, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://fund.eastmoney.com/js/fundcode_search.js", nil)
 	if err != nil {
@@ -165,6 +176,52 @@ func (f *EastmoneyFetcher) FetchMarketRankings(ctx context.Context, query Market
 		entries = append(entries, entry)
 	}
 	return entries, payload.AllNum, nil
+}
+
+func (f *EastmoneyFetcher) FetchFundPurchaseStatuses(ctx context.Context) (map[string]FundPurchaseStatus, error) {
+	values := url.Values{"t": {"8"}, "page": {"1,50000"}, "js": {"reData"}, "sort": {"fcode,asc"}}
+	endpoint := "https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?" + values.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Referer", "https://fund.eastmoney.com/Fund_sgzt_bzdm.html")
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("purchase status returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return decodePurchaseStatuses(string(body))
+}
+
+func decodePurchaseStatuses(body string) (map[string]FundPurchaseStatus, error) {
+	payload := strings.TrimSpace(stripBOM(body))
+	payload = strings.TrimPrefix(payload, "var reData=")
+	payload = strings.TrimSuffix(payload, ";")
+	payload = regexp.MustCompile(`,record:.*$`).ReplaceAllString(payload, "}")
+	quoted := regexp.MustCompile(`([,{])([A-Za-z_][A-Za-z0-9_]*)\s*:`).ReplaceAllString(payload, `${1}"${2}":`)
+	var result purchaseStatusPayload
+	if err := json.Unmarshal([]byte(quoted), &result); err != nil {
+		return nil, fmt.Errorf("decode purchase statuses: %w", err)
+	}
+	statuses := make(map[string]FundPurchaseStatus, len(result.Datas))
+	for _, row := range result.Datas {
+		if len(row) < 10 {
+			continue
+		}
+		minimumPurchase, _ := strconv.ParseFloat(row[8], 64)
+		dailyLimit, _ := strconv.ParseFloat(row[9], 64)
+		statuses[row[0]] = FundPurchaseStatus{Code: row[0], PurchaseStatus: row[5], MinimumPurchase: minimumPurchase, DailyLimit: dailyLimit}
+	}
+	return statuses, nil
 }
 
 func (f *EastmoneyFetcher) FetchMarketProfile(ctx context.Context, fund model.MarketSearchFund, establishedDate time.Time, days int) (*model.MarketFundProfile, error) {

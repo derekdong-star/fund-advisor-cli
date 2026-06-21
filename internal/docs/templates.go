@@ -28,6 +28,7 @@ func renderHomepage(cfg *config.Config, input PublishInput, result *ExportResult
 		"- 先看最新日报，了解当前组合动作。",
 		"- 再看月度定投计划，安排新增资金。",
 		"- 稳定候选池用于补充观察名单，不用于高频切换。",
+		"- 当前强势基金榜展示知名基金公司中当前最强的 12 只产品，前 3 只重点关注。",
 	)
 	if _, ok := result.Latest["backtest"]; ok {
 		lines = append(lines, "- 回测页只用于验证规则稳定性，不代表未来收益。")
@@ -75,7 +76,7 @@ func renderHomepage(cfg *config.Config, input PublishInput, result *ExportResult
 
 	lines = append(lines, "", "## 快速入口", "")
 	hasLatest := false
-	for _, key := range []string{"daily", "dca-plan", "market-pool", "backtest"} {
+	for _, key := range []string{"daily", "dca-plan", "market-pool", "momentum-pool", "momentum-sensitivity", "momentum-parameter-grid", "momentum-stages", "backtest"} {
 		if item, ok := result.Latest[key]; ok {
 			lines = append(lines, fmt.Sprintf("- [%s](%s)", item.Label, filepath.ToSlash(item.Path)))
 			hasLatest = true
@@ -90,7 +91,7 @@ func renderHomepage(cfg *config.Config, input PublishInput, result *ExportResult
 		if dayIndex := latestArchiveIndexPath(result); dayIndex != "" {
 			lines = append(lines, fmt.Sprintf("- [最新归档目录](%s)", filepath.ToSlash(dayIndex)))
 		}
-		for _, key := range []string{"daily", "market-pool", "dca-plan", "backtest"} {
+		for _, key := range []string{"daily", "market-pool", "momentum-pool", "momentum-sensitivity", "momentum-parameter-grid", "momentum-stages", "dca-plan", "backtest"} {
 			if item, ok := result.Archive[key]; ok {
 				lines = append(lines, fmt.Sprintf("- [最新归档%s](%s)", archiveLabel(key), filepath.ToSlash(item.Path)))
 			}
@@ -117,7 +118,7 @@ func renderSummary(cfg *config.Config, result *ExportResult) string {
 	if cfg.Publishing.GitBook.ArchiveByRunDate {
 		lines = append(lines, fmt.Sprintf("- [历史归档](%s)", filepath.ToSlash(filepath.Join(archiveDirName, readmeName))))
 	}
-	for _, key := range []string{"daily", "dca-plan", "market-pool", "backtest"} {
+	for _, key := range []string{"daily", "dca-plan", "market-pool", "momentum-pool", "momentum-sensitivity", "momentum-parameter-grid", "momentum-stages", "backtest"} {
 		if item, ok := result.Latest[key]; ok {
 			lines = append(lines, fmt.Sprintf("- [%s](%s)", item.Label, filepath.ToSlash(item.Path)))
 		}
@@ -135,7 +136,7 @@ func renderSummary(cfg *config.Config, result *ExportResult) string {
 }
 
 func latestArchiveIndexPath(result *ExportResult) string {
-	for _, key := range []string{"daily", "dca-plan", "market-pool", "backtest"} {
+	for _, key := range []string{"daily", "dca-plan", "market-pool", "momentum-pool", "momentum-sensitivity", "momentum-parameter-grid", "momentum-stages", "backtest"} {
 		if item, ok := result.Archive[key]; ok {
 			return filepath.ToSlash(filepath.Join(filepath.Dir(item.Path), readmeName))
 		}
@@ -262,6 +263,14 @@ func archiveLabel(key string) string {
 		return "定投计划"
 	case "market-pool":
 		return "稳定候选池"
+	case "momentum-pool":
+		return "当前强势基金榜"
+	case "momentum-sensitivity":
+		return "动量多样本回测"
+	case "momentum-parameter-grid":
+		return "动量参数稳健性"
+	case "momentum-stages":
+		return "动量跨阶段稳健性"
 	case "backtest":
 		return "策略回测"
 	default:

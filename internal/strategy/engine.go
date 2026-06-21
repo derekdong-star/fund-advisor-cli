@@ -1022,16 +1022,23 @@ func rollingReturn(history []model.FundSnapshot, days int) float64 {
 	if len(history) < 2 {
 		return 0
 	}
-	end := history[len(history)-1].NAV
+	end := adjustedReturnNAV(history[len(history)-1])
 	idx := len(history) - 1 - days
 	if idx < 0 {
 		idx = 0
 	}
-	start := history[idx].NAV
+	start := adjustedReturnNAV(history[idx])
 	if start == 0 {
 		return 0
 	}
 	return end/start - 1
+}
+
+func adjustedReturnNAV(snapshot model.FundSnapshot) float64 {
+	if snapshot.AccNAV > 0 {
+		return snapshot.AccNAV
+	}
+	return snapshot.NAV
 }
 
 func peerAverage(states []model.PositionState, days int) map[string]float64 {

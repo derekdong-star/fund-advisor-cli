@@ -25,6 +25,8 @@ type trendPoint struct {
 	EquityReturn float64 `json:"equityReturn"`
 }
 
+type accumulatedTrendPoint [2]float64
+
 func NewEastmoneyFetcher(timeout time.Duration) *EastmoneyFetcher {
 	return &EastmoneyFetcher{client: &http.Client{Timeout: timeout}}
 }
@@ -68,10 +70,15 @@ func ParsePingzhongData(code, body string, days int) (*model.FetchResult, error)
 	if len(points) == 0 {
 		return nil, fmt.Errorf("no net worth trend found for %s", code)
 	}
+	accumulatedByTime := parseAccumulatedTrend(body)
 	snapshots := make([]model.FundSnapshot, 0, len(points))
 	for _, point := range points {
 		if point.Y == 0 {
 			continue
+		}
+		accNAV := accumulatedByTime[point.X]
+		if accNAV <= 0 {
+			accNAV = point.Y
 		}
 		tradeDate := time.UnixMilli(point.X).UTC()
 		snapshots = append(snapshots, model.FundSnapshot{
@@ -79,7 +86,7 @@ func ParsePingzhongData(code, body string, days int) (*model.FetchResult, error)
 			FundName:     name,
 			TradeDate:    tradeDate,
 			NAV:          point.Y,
-			AccNAV:       point.Y,
+			AccNAV:       accNAV,
 			DayChangePct: point.EquityReturn / 100,
 			Source:       "eastmoney-pingzhongdata",
 			CreatedAt:    time.Now().UTC(),
@@ -92,6 +99,24 @@ func ParsePingzhongData(code, body string, days int) (*model.FetchResult, error)
 		snapshots = snapshots[len(snapshots)-days:]
 	}
 	return &model.FetchResult{Code: code, Name: name, Snapshots: snapshots}, nil
+}
+
+func parseAccumulatedTrend(body string) map[int64]float64 {
+	result := make(map[int64]float64)
+	raw, err := extractValue(body, "Data_ACWorthTrend")
+	if err != nil {
+		return result
+	}
+	var points []accumulatedTrendPoint
+	if err := json.Unmarshal([]byte(raw), &points); err != nil {
+		return result
+	}
+	for _, point := range points {
+		if point[1] > 0 {
+			result[int64(point[0])] = point[1]
+		}
+	}
+	return result
 }
 
 func extractStringVar(body, name string) (string, error) {

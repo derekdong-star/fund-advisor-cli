@@ -1,0 +1,13 @@
+{
+  "method": "Five deterministic candidate universes, 1200-day history, top 3 funds, 20-trading-day periods. Product-level pairs only count funds that remained in the top 3 after the observation period, matching the real trial-entry rule.",
+  "selected_threshold": 0.10,
+  "reason": "10% retained 48 product-level qualifying pairs and produced the strongest next-period average return and win rate. High-gain funds are intentionally allowed by user preference.",
+  "items": [
+    {"threshold": 0.00, "pairs": 144, "next_average_return": 0.025728950733272186, "next_win_rate": 0.6388888888888888},
+    {"threshold": 0.01, "pairs": 132, "next_average_return": 0.028222570600748606, "next_win_rate": 0.6590909090909091},
+    {"threshold": 0.02, "pairs": 124, "next_average_return": 0.02990451898423218, "next_win_rate": 0.6774193548387096},
+    {"threshold": 0.05, "pairs": 100, "next_average_return": 0.03346029390203508, "next_win_rate": 0.70},
+    {"threshold": 0.10, "pairs": 48, "next_average_return": 0.06363780834146034, "next_win_rate": 0.8125}
+  ],
+  "limitations": ["Current-survivor bias remains.", "Historical purchase limits are not reconstructed.", "This diagnostic supports threshold selection but cannot guarantee future profit."]
+}

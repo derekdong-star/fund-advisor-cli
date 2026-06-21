@@ -82,6 +82,109 @@ func exportReports(cfg *config.Config, input PublishInput) (*ExportResult, error
 			result.Archive["market-pool"] = ReportArtifact{Label: "归档候选池", Path: relativeDocPath(root, archiveAbs)}
 		}
 	}
+	if input.MomentumPool != nil {
+		rendered, err := report.RenderMomentumPool(*input.MomentumPool, "markdown")
+		if err != nil {
+			return nil, err
+		}
+		latestRel := filepath.Join(latestDirName, "momentum-pool.md")
+		latestAbs := latestReportPath(root, "momentum-pool")
+		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
+			return nil, err
+		}
+		result.Latest["momentum-pool"] = ReportArtifact{Label: "当前强势基金榜", Path: latestRel}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-pool")
+			if err := writeDoc(archiveAbs, rendered); err != nil {
+				return nil, err
+			}
+			result.Archive["momentum-pool"] = ReportArtifact{Label: "归档强势基金榜", Path: relativeDocPath(root, archiveAbs)}
+		}
+	}
+	if cfg.Publishing.GitBook.IncludeMomentumSensitivity && input.MomentumSensitivity != nil {
+		rendered, err := report.RenderMomentumBacktestSensitivity(*input.MomentumSensitivity, "markdown")
+		if err != nil {
+			return nil, err
+		}
+		latestRel := filepath.Join(latestDirName, "momentum-sensitivity.md")
+		latestAbs := latestReportPath(root, "momentum-sensitivity")
+		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
+			return nil, err
+		}
+		result.Latest["momentum-sensitivity"] = ReportArtifact{Label: "动量多样本回测", Path: latestRel}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-sensitivity")
+			if err := writeDoc(archiveAbs, rendered); err != nil {
+				return nil, err
+			}
+			result.Archive["momentum-sensitivity"] = ReportArtifact{Label: "归档动量多样本回测", Path: relativeDocPath(root, archiveAbs)}
+		}
+	} else if cfg.Publishing.GitBook.IncludeMomentumSensitivity && input.MomentumSensitivityError != "" {
+		if err := removeDocIfExists(latestReportPath(root, "momentum-sensitivity")); err != nil {
+			return nil, err
+		}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			if err := removeDocIfExists(archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-sensitivity")); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if cfg.Publishing.GitBook.IncludeMomentumParameterGrid && input.MomentumParameterGrid != nil {
+		rendered, err := report.RenderMomentumBacktestParameterGrid(*input.MomentumParameterGrid, "markdown")
+		if err != nil {
+			return nil, err
+		}
+		latestRel := filepath.Join(latestDirName, "momentum-parameter-grid.md")
+		latestAbs := latestReportPath(root, "momentum-parameter-grid")
+		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
+			return nil, err
+		}
+		result.Latest["momentum-parameter-grid"] = ReportArtifact{Label: "动量参数稳健性", Path: latestRel}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-parameter-grid")
+			if err := writeDoc(archiveAbs, rendered); err != nil {
+				return nil, err
+			}
+			result.Archive["momentum-parameter-grid"] = ReportArtifact{Label: "归档动量参数稳健性", Path: relativeDocPath(root, archiveAbs)}
+		}
+	} else if cfg.Publishing.GitBook.IncludeMomentumParameterGrid && input.MomentumParameterGridError != "" {
+		if err := removeDocIfExists(latestReportPath(root, "momentum-parameter-grid")); err != nil {
+			return nil, err
+		}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			if err := removeDocIfExists(archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-parameter-grid")); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if cfg.Publishing.GitBook.IncludeMomentumStages && input.MomentumStages != nil {
+		rendered, err := report.RenderMomentumBacktestStages(*input.MomentumStages, "markdown")
+		if err != nil {
+			return nil, err
+		}
+		latestRel := filepath.Join(latestDirName, "momentum-stages.md")
+		latestAbs := latestReportPath(root, "momentum-stages")
+		if err := writeLatestDoc(latestAbs, rendered, cfg.Publishing.GitBook.OverwriteLatest); err != nil {
+			return nil, err
+		}
+		result.Latest["momentum-stages"] = ReportArtifact{Label: "动量跨阶段稳健性", Path: latestRel}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			archiveAbs := archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-stages")
+			if err := writeDoc(archiveAbs, rendered); err != nil {
+				return nil, err
+			}
+			result.Archive["momentum-stages"] = ReportArtifact{Label: "归档动量跨阶段稳健性", Path: relativeDocPath(root, archiveAbs)}
+		}
+	} else if cfg.Publishing.GitBook.IncludeMomentumStages && input.MomentumStagesError != "" {
+		if err := removeDocIfExists(latestReportPath(root, "momentum-stages")); err != nil {
+			return nil, err
+		}
+		if cfg.Publishing.GitBook.ArchiveByRunDate {
+			if err := removeDocIfExists(archiveReportPath(root, input.Analysis.Summary.RunDate, "momentum-stages")); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if cfg.Publishing.GitBook.IncludeBacktest {
 		backtestUnavailable := input.Backtest == nil && input.BacktestError != ""
 		if cfg.Publishing.GitBook.HideBacktestWhenUnavailable && backtestUnavailable {

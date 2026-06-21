@@ -148,6 +148,103 @@ func TestRenderMarkdownIncludesRecommendations(t *testing.T) {
 	}
 }
 
+func TestRenderMomentumBacktestSensitivityMarkdownShowsWorstResults(t *testing.T) {
+	t.Parallel()
+	report := model.MomentumBacktestSensitivityReport{
+		Summary: model.MomentumBacktestSensitivitySummary{
+			GeneratedAt:               time.Date(2026, 6, 21, 9, 0, 0, 0, time.UTC),
+			RequestedSeeds:            5,
+			CompletedSeeds:            5,
+			SelectionCount:            6,
+			RebalanceEvery:            30,
+			WorstTotalReturn:          0.39,
+			WorstExcessReturn:         0.11,
+			WorstRecentExcessReturn:   -0.12,
+			WorstMaxDrawdown:          0.16,
+			PositiveTotalReturnSeeds:  5,
+			PositiveExcessReturnSeeds: 5,
+			PositiveRecentExcessSeeds: 3,
+		},
+		Items: []model.MomentumBacktestSensitivityItem{{UniverseSeed: 4, CandidateCount: 180, TotalReturn: 0.41, ExcessReturn: 0.12, RecentExcessReturn: -0.12, MaxDrawdown: 0.16}},
+	}
+
+	rendered, err := RenderMomentumBacktestSensitivity(report, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMomentumBacktestSensitivity() error = %v", err)
+	}
+	for _, expected := range []string{"最差总收益：`39.00%`", "最差后半段超额收益：`-12.00%`", "正后半段超额样本：`3/5`", "| 4 | 180 | 41.00% | 12.00% | -12.00% | 16.00% | 完成 |"} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("expected %q in rendered sensitivity report, got %s", expected, rendered)
+		}
+	}
+}
+
+func TestRenderMomentumBacktestParameterGridMarkdownShowsCurrentRank(t *testing.T) {
+	t.Parallel()
+	report := model.MomentumBacktestParameterGridReport{
+		Summary: model.MomentumBacktestParameterGridSummary{GeneratedAt: time.Now(), CombinationCount: 2, Seeds: 5, CurrentSelectionCount: 6, CurrentRebalanceEvery: 30, CurrentRank: 2, LeadingSelectionCount: 8, LeadingRebalanceEvery: 30},
+		Items:   []model.MomentumBacktestParameterGridItem{{Rank: 1, SelectionCount: 8, RebalanceEvery: 30, CompletedSeeds: 5, PositiveRecentExcessSeeds: 4, WorstRecentExcessReturn: -0.04, WorstExcessReturn: 0.08, WorstTotalReturn: 0.35, WorstMaxDrawdown: 0.18, AverageTotalReturn: 0.50}},
+	}
+
+	rendered, err := RenderMomentumBacktestParameterGrid(report, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMomentumBacktestParameterGrid() error = %v", err)
+	}
+	for _, expected := range []string{"正式参数：`6只 / 30日`，排名 `2`", "当前领先参数：`8只 / 30日`", "| 1 | 8只 / 30日 | 0.0% | 0.0% | 0.0% | 0.0% | 4/5 | -4.00%"} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("expected %q in rendered grid, got %s", expected, rendered)
+		}
+	}
+}
+
+func TestRenderMomentumBacktestCorrelationGridMarkdown(t *testing.T) {
+	report := model.MomentumBacktestCorrelationGridReport{
+		Summary: model.MomentumBacktestCorrelationGridSummary{CurrentRank: 2, LeadingMaxCorrelation: 0.95, CorrelationWindowDays: 60},
+		Items:   []model.MomentumBacktestCorrelationGridItem{{Rank: 1, MaxCorrelation: 0.95, CompletedSeeds: 5, PositiveRecentExcessSeeds: 4, WorstRecentExcessReturn: -0.01, WorstExcessReturn: 0.10, WorstTotalReturn: 0.40, WorstMaxDrawdown: 0.20, Average2024ExcessReturn: -0.05, Worst2024ExcessReturn: -0.12}},
+	}
+
+	rendered, err := RenderMomentumBacktestCorrelationGrid(report, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMomentumBacktestCorrelationGrid() error = %v", err)
+	}
+	if !strings.Contains(rendered, "# 动量策略相关性去重诊断") || !strings.Contains(rendered, "| 1 | 0.95 | 4/5 |") || !strings.Contains(rendered, "2024平均超额") {
+		t.Fatalf("unexpected correlation grid markdown: %s", rendered)
+	}
+}
+
+func TestRenderMomentumBacktestWeightGridMarkdown(t *testing.T) {
+	report := model.MomentumBacktestWeightGridReport{
+		Summary: model.MomentumBacktestWeightGridSummary{CurrentRank: 2, LeadingLabel: "短中期加速"},
+		Items:   []model.MomentumBacktestWeightGridItem{{Rank: 1, Label: "短中期加速", Weight20D: 0.25, Weight60D: 0.40, Weight120D: 0.25, Weight250D: 0.10, CompletedSeeds: 5, PositiveRecentExcessSeeds: 4, AverageRecentTopDecileHitRate: 0.31, WorstRecentTopDecileHitRate: 0.22, AverageTopDecileHitRate: 0.28, AverageFuturePercentile: 0.70}},
+	}
+
+	rendered, err := RenderMomentumBacktestWeightGrid(report, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMomentumBacktestWeightGrid() error = %v", err)
+	}
+	if !strings.Contains(rendered, "# 动量权重未来赢家捕获诊断") || !strings.Contains(rendered, "| 1 | 短中期加速 | 25% / 40% / 25% / 10% | 31.0% |") {
+		t.Fatalf("unexpected weight grid markdown: %s", rendered)
+	}
+}
+
+func TestRenderMomentumBacktestStagesMarkdownMarksPartialYears(t *testing.T) {
+	t.Parallel()
+	report := model.MomentumBacktestStageReport{
+		Summary: model.MomentumBacktestStageSummary{GeneratedAt: time.Now(), SelectionCount: 4, RebalanceEvery: 25, StageCount: 2, CompleteStageCount: 1, PositiveAverageExcessStages: 1, PositiveAllSeedExcessStages: 1, WorstCompleteStage: "2025", WorstCompleteAverageExcess: 0.08, WorstCompleteSeedExcess: 0.01},
+		Items:   []model.MomentumBacktestStageItem{{StageLabel: "2025", Complete: true, SeedCount: 5, PositiveReturnSeeds: 5, PositiveExcessSeeds: 5, AverageReturn: 0.20, AverageExcessReturn: 0.08, WorstReturn: 0.10, WorstExcessReturn: 0.01}, {StageLabel: "2026", Complete: false, SeedCount: 5, PositiveReturnSeeds: 4, PositiveExcessSeeds: 3}},
+	}
+
+	rendered, err := RenderMomentumBacktestStages(report, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMomentumBacktestStages() error = %v", err)
+	}
+	for _, expected := range []string{"完整年度：`1/2`", "最弱完整年度：`2025`", "| 2026 | 否 |"} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("expected %q in rendered stages, got %s", expected, rendered)
+		}
+	}
+}
+
 func TestRenderMarkdownSummarizesOpportunityWithoutBuy(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
@@ -339,5 +436,37 @@ func TestRenderMarketPoolMarkdown(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "| 1 | A股宽基 | 易方达中证A500ETF联接A | 8 | 12.00% | 21.00% | 9.00% | 32.0亿 | 是 | 250日收益 21.00%；指数工具更稳定 |") {
 		t.Fatalf("expected market pool row, got %s", rendered)
+	}
+}
+
+func TestRenderMomentumPoolMarkdown(t *testing.T) {
+	rendered, err := RenderMomentumPool(model.MomentumPoolReport{
+		Summary: model.MomentumPoolSummary{UniverseCount: 100, EquityCount: 50, EvaluatedCount: 20, QualifiedCount: 5, SelectedCount: 1, PositiveBreadth: 0.61, Regime: "risk-on", ForwardValidationDays: 30, TrialReturnThreshold: 0.01, PendingValidationBatches: 1, ExpiredValidationBatches: 2, OldestPendingStartDate: time.Date(2026, time.June, 1, 0, 0, 0, 0, time.UTC), OldestPendingTradingDays: 10},
+		Items:   []model.MomentumPoolItem{{Rank: 1, FundCode: "000001", FundName: "强势基金A", PurchaseStatus: "限大额", DailyLimit: 10000, Score: 95, Return20D: 0.05, Return60D: 0.15, Return120D: 0.30}},
+		Opportunities: []model.MomentumOpportunityItem{
+			{Rank: 1, FundCode: "000001", FundName: "强势基金A", Source: "重点关注", Execution: "仅观察，等待前瞻验证", MomentumScore: 95, ObservationDays: 10, ObservationReturn: 0.03, Return20D: 0.05, Return60D: 0.15, Return120D: 0.30, Return250D: 0.50, PurchaseStatus: "限大额", Evidence: "当前强势重点关注；产品级前瞻验证中"},
+			{Rank: 2, FundCode: "000002", FundName: "新晋基金B", Source: "其他强势基金", Execution: "持续跟踪，不买入", MomentumScore: 94, Return20D: 0.08, Return60D: 0.16, Return120D: 0.28, Return250D: 0.48, Evidence: "当前强势排名靠前，进入视野"},
+		},
+	}, "markdown")
+	if err != nil {
+		t.Fatalf("RenderMomentumPool() error = %v", err)
+	}
+	if !strings.Contains(rendered, "# 当前强势基金榜") || !strings.Contains(rendered, "强势基金A") {
+		t.Fatalf("unexpected momentum markdown: %s", rendered)
+	}
+	if !strings.Contains(rendered, "| 1 | 000001 | 强势基金A | 重点关注 | 95.0 | 3.00% | 10/30 | 5.00% | 15.00% | 30.00% | 50.00% | 限大额 |") || !strings.Contains(rendered, "| 2 | 000002 | 新晋基金B | 其他强势基金 | 94.0 | 0.00% | 0/30 | 8.00% | 16.00% | 28.00% | 48.00% | 未知 |") {
+		t.Fatalf("expected simplified strong-fund ranking, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "- 筛选范围：知名基金公司权益产品；同一公司可多只入榜") || !strings.Contains(rendered, "前瞻验证只决定是否试投，不影响基金进入榜单") {
+		t.Fatalf("expected simplified ranking guidance, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "- 当前执行：`仅观察，暂不买入`") {
+		t.Fatalf("expected watch-only execution details, got %s", rendered)
+	}
+	if !strings.Contains(rendered, "- 试投进度：已观察约 10/30 个交易日，还需约 20 个；周期收益达到 1.0% 后可小额试投") {
+		t.Fatalf("expected actionable validation progress, got %s", rendered)
+	}
+	if strings.Contains(rendered, "前瞻验证批次") || strings.Contains(rendered, "相关性") || strings.Contains(rendered, "观察候选（暂不买入）") || strings.Contains(rendered, "新晋强势挑战者") || strings.Contains(rendered, "扩展观察产品") {
+		t.Fatalf("expected legacy pool sections to stay hidden, got %s", rendered)
 	}
 }

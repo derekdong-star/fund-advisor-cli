@@ -36,6 +36,26 @@ func validateTree(cfg *config.Config, root string) error {
 	} else if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	if _, err := os.Stat(latestReportPath(root, "momentum-pool")); err == nil {
+		required = append(required, latestReportPath(root, "momentum-pool"))
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(latestReportPath(root, "momentum-sensitivity")); err == nil {
+		required = append(required, latestReportPath(root, "momentum-sensitivity"))
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(latestReportPath(root, "momentum-parameter-grid")); err == nil {
+		required = append(required, latestReportPath(root, "momentum-parameter-grid"))
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := os.Stat(latestReportPath(root, "momentum-stages")); err == nil {
+		required = append(required, latestReportPath(root, "momentum-stages"))
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 
 	for _, path := range required {
 		if _, err := os.Stat(path); err != nil {

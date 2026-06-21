@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/derekdong-star/fund-advisor-cli/internal/config"
@@ -19,11 +20,21 @@ import (
 )
 
 type Service struct {
-	config   *config.Config
-	store    *store.Store
-	fetcher  *fetcher.EastmoneyFetcher
-	engine   *strategy.Engine
-	enhancer *llm.Enhancer
+	config              *config.Config
+	store               *store.Store
+	fetcher             *fetcher.EastmoneyFetcher
+	engine              *strategy.Engine
+	enhancer            *llm.Enhancer
+	marketFundsCache    []model.MarketSearchFund
+	marketRankingsCache []fetcher.MarketRankEntry
+	marketProfileMu     sync.RWMutex
+	marketProfileCache  map[string]*model.MarketFundProfile
+	purchaseStatusCache map[string]fetcher.FundPurchaseStatus
+	purchaseStatusErr   error
+	purchaseStatusReady bool
+	fetchWarnings       []string
+	fetchHistory        func(context.Context, string, int) (*model.FetchResult, error)
+	fetchMarketProfile  func(context.Context, model.MarketSearchFund, time.Time, int) (*model.MarketFundProfile, error)
 }
 
 func New(configPath string) (*Service, error) {
@@ -39,12 +50,15 @@ func New(configPath string) (*Service, error) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
+	eastmoneyFetcher := fetcher.NewEastmoneyFetcher(timeout)
 	return &Service{
-		config:   cfg,
-		store:    st,
-		fetcher:  fetcher.NewEastmoneyFetcher(timeout),
-		engine:   strategy.NewEngine(cfg.Strategy),
-		enhancer: llm.NewEnhancer(cfg.LLM),
+		config:             cfg,
+		store:              st,
+		fetcher:            eastmoneyFetcher,
+		engine:             strategy.NewEngine(cfg.Strategy),
+		enhancer:           llm.NewEnhancer(cfg.LLM),
+		marketProfileCache: make(map[string]*model.MarketFundProfile),
+		fetchHistory:       eastmoneyFetcher.FetchHistory,
 	}, nil
 }
 
@@ -53,6 +67,46 @@ func (s *Service) Close() error { return s.store.Close() }
 func (s *Service) Config() *config.Config { return s.config }
 
 func (s *Service) Validate() error { return s.config.Validate() }
+
+func (s *Service) FetchWarnings() []string {
+	return append([]string(nil), s.fetchWarnings...)
+}
+
+func (s *Service) MomentumPoolHistory() ([]model.MomentumPoolReport, error) {
+	history, err := s.store.MomentumPoolHistory()
+	if err != nil {
+		return nil, err
+	}
+	return compactMomentumPoolHistory(history, 400), nil
+}
+
+func (s *Service) RestoreMomentumPoolHistory(reports []model.MomentumPoolReport) (int, error) {
+	return s.store.RestoreMomentumPoolHistory(reports)
+}
+
+func compactMomentumPoolHistory(history []model.MomentumPoolReport, maxDays int) []model.MomentumPoolReport {
+	if len(history) == 0 || maxDays <= 0 {
+		return nil
+	}
+	latestByDay := make(map[string]model.MomentumPoolReport)
+	days := make([]string, 0)
+	for _, report := range history {
+		day := report.Summary.RunDate.UTC().Format("2006-01-02")
+		if _, ok := latestByDay[day]; !ok {
+			days = append(days, day)
+		}
+		latestByDay[day] = report
+	}
+	sort.Strings(days)
+	if len(days) > maxDays {
+		days = days[len(days)-maxDays:]
+	}
+	result := make([]model.MomentumPoolReport, 0, len(days))
+	for _, day := range days {
+		result = append(result, latestByDay[day])
+	}
+	return result
+}
 
 func (s *Service) SyncPositions() error {
 	for _, fund := range s.config.Funds {
@@ -76,6 +130,7 @@ func (s *Service) SyncPositions() error {
 }
 
 func (s *Service) Fetch(ctx context.Context, days int) error {
+	s.fetchWarnings = nil
 	if err := s.SyncPositions(); err != nil {
 		return err
 	}
@@ -95,14 +150,19 @@ func (s *Service) Fetch(ctx context.Context, days int) error {
 			continue
 		}
 		if err := s.fetchAndStore(ctx, candidate.Code, days, 0, 0); err != nil {
-			return err
+			s.fetchWarnings = append(s.fetchWarnings, fmt.Sprintf("候选基金 %s 数据刷新失败，已跳过：%v", candidate.Code, err))
 		}
 	}
 	return nil
 }
 
 func (s *Service) fetchAndStore(ctx context.Context, code string, days int, accountValue, estimatedUnits float64) error {
-	result, err := s.fetcher.FetchHistory(ctx, code, days)
+	result, err := fetchHistoryWithRetry(ctx, 3, func() (*model.FetchResult, error) {
+		if s.fetchHistory != nil {
+			return s.fetchHistory(ctx, code, days)
+		}
+		return s.fetcher.FetchHistory(ctx, code, days)
+	})
 	if err != nil {
 		return fmt.Errorf("fetch %s: %w", code, err)
 	}
@@ -118,6 +178,34 @@ func (s *Service) fetchAndStore(ctx context.Context, code string, days int, acco
 		}
 	}
 	return nil
+}
+
+func fetchHistoryWithRetry(ctx context.Context, attempts int, fetch func() (*model.FetchResult, error)) (*model.FetchResult, error) {
+	if attempts < 1 {
+		attempts = 1
+	}
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		result, err := fetch()
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if attempt == attempts {
+			break
+		}
+		timer := time.NewTimer(time.Duration(attempt) * 250 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, lastErr
 }
 
 func (s *Service) Analyze() (*model.AnalysisReport, error) {
@@ -194,6 +282,7 @@ func (s *Service) buildAnalysis(save bool) (*model.AnalysisReport, error) {
 		})
 	}
 	reportData := s.engine.Analyze(s.config.Portfolio.Name, states, candidates)
+	reportData.Summary.Notes = append(reportData.Summary.Notes, s.fetchWarnings...)
 	if reconcileResult != nil && reconcileResult.Applied {
 		enrichPositionStatesWithLedger(reportData.Position, reconcileResult)
 		reportData.Summary.Notes = append(reportData.Summary.Notes, reconcileResult.Note)
@@ -1050,6 +1139,13 @@ func pow(base, exp float64) float64 {
 }
 
 func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

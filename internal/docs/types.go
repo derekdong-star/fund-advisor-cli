@@ -25,10 +25,18 @@ type ExportResult struct {
 }
 
 type PublishInput struct {
-	Analysis        *model.AnalysisReport
-	Plan            *model.DCAPlanReport
-	MarketPool      *model.MarketPoolReport
-	MarketPoolError string
-	Backtest        *model.BacktestReport
-	BacktestError   string
+	Analysis                   *model.AnalysisReport
+	Plan                       *model.DCAPlanReport
+	MarketPool                 *model.MarketPoolReport
+	MarketPoolError            string
+	MomentumPool               *model.MomentumPoolReport
+	MomentumPoolError          string
+	MomentumSensitivity        *model.MomentumBacktestSensitivityReport
+	MomentumSensitivityError   string
+	MomentumParameterGrid      *model.MomentumBacktestParameterGridReport
+	MomentumParameterGridError string
+	MomentumStages             *model.MomentumBacktestStageReport
+	MomentumStagesError        string
+	Backtest                   *model.BacktestReport
+	BacktestError              string
 }

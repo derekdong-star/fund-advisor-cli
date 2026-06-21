@@ -337,8 +337,8 @@ func TestDocsPublishCommandSupportsRefreshFlag(t *testing.T) {
 	if dayFlag == nil {
 		t.Fatalf("expected days flag")
 	}
-	if got := dayFlag.DefValue; got != "180" {
-		t.Fatalf("days default = %s, want 180", got)
+	if got := dayFlag.DefValue; got != "300" {
+		t.Fatalf("days default = %s, want 300", got)
 	}
 }
 
@@ -762,10 +762,12 @@ func TestDocsPublishRefreshBuildsMarketPool(t *testing.T) {
 	originalFetch := fetchForDocsPublish
 	originalAnalyze := analyzeForDocsPublish
 	originalBuild := buildMarketPoolForDocsPublish
+	originalMomentumBuild := buildMomentumPoolForDocsPublish
 	defer func() {
 		fetchForDocsPublish = originalFetch
 		analyzeForDocsPublish = originalAnalyze
 		buildMarketPoolForDocsPublish = originalBuild
+		buildMomentumPoolForDocsPublish = originalMomentumBuild
 	}()
 
 	fetchForDocsPublish = func(ctx context.Context, svc *service.Service, days int) error {
@@ -816,6 +818,9 @@ func TestDocsPublishRefreshBuildsMarketPool(t *testing.T) {
 			}},
 		}, nil
 	}
+	buildMomentumPoolForDocsPublish = func(ctx context.Context, svc *service.Service, days int) (*model.MomentumPoolReport, error) {
+		return &model.MomentumPoolReport{}, nil
+	}
 
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
@@ -850,10 +855,12 @@ func TestDocsPublishRefreshBuildsMarketPoolBeforeAnalyze(t *testing.T) {
 	originalFetch := fetchForDocsPublish
 	originalAnalyze := analyzeForDocsPublish
 	originalBuild := buildMarketPoolForDocsPublish
+	originalMomentumBuild := buildMomentumPoolForDocsPublish
 	defer func() {
 		fetchForDocsPublish = originalFetch
 		analyzeForDocsPublish = originalAnalyze
 		buildMarketPoolForDocsPublish = originalBuild
+		buildMomentumPoolForDocsPublish = originalMomentumBuild
 	}()
 
 	steps := make([]string, 0, 3)
@@ -867,6 +874,9 @@ func TestDocsPublishRefreshBuildsMarketPoolBeforeAnalyze(t *testing.T) {
 		return &model.MarketPoolReport{
 			Summary: model.MarketPoolSummary{RunDate: now},
 		}, nil
+	}
+	buildMomentumPoolForDocsPublish = func(ctx context.Context, svc *service.Service, days int) (*model.MomentumPoolReport, error) {
+		return &model.MomentumPoolReport{}, nil
 	}
 	analyzeForDocsPublish = func(svc *service.Service) (*model.AnalysisReport, error) {
 		steps = append(steps, "analyze")
@@ -911,6 +921,64 @@ func TestDocsPublishRefreshBuildsMarketPoolBeforeAnalyze(t *testing.T) {
 
 	if got, want := strings.Join(steps, ","), "fetch,market-pool,analyze"; got != want {
 		t.Fatalf("refresh order = %s, want %s", got, want)
+	}
+}
+
+func TestDocsPublishSkipFetchReusesStoredData(t *testing.T) {
+	originalFetch := fetchForDocsPublish
+	originalAnalyze := analyzeForDocsPublish
+	originalBuild := buildMarketPoolForDocsPublish
+	originalMomentumBuild := buildMomentumPoolForDocsPublish
+	defer func() {
+		fetchForDocsPublish = originalFetch
+		analyzeForDocsPublish = originalAnalyze
+		buildMarketPoolForDocsPublish = originalBuild
+		buildMomentumPoolForDocsPublish = originalMomentumBuild
+	}()
+	fetchCalls := 0
+	fetchForDocsPublish = func(ctx context.Context, svc *service.Service, days int) error {
+		fetchCalls++
+		return nil
+	}
+	now := time.Date(2026, 4, 19, 9, 0, 0, 0, time.UTC)
+	buildMarketPoolForDocsPublish = func(context.Context, *service.Service, int) (*model.MarketPoolReport, error) {
+		return &model.MarketPoolReport{Summary: model.MarketPoolSummary{RunDate: now}}, nil
+	}
+	buildMomentumPoolForDocsPublish = func(context.Context, *service.Service, int) (*model.MomentumPoolReport, error) {
+		return &model.MomentumPoolReport{}, nil
+	}
+	analyzeForDocsPublish = func(*service.Service) (*model.AnalysisReport, error) {
+		return &model.AnalysisReport{Summary: model.AnalysisSummary{PortfolioName: "test", RunDate: now, ActionCounts: map[model.Action]int{}}, DCAPlan: &model.DCAPlanReport{Summary: model.DCAPlanSummary{PortfolioName: "test", PlanDate: now}}}, nil
+	}
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+	runner := NewRootCmd()
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v", err)
+	}
+	runner = NewRootCmd()
+	runner.SetArgs([]string{"docs", "publish", "--config", configPath, "--refresh", "--skip-fetch"})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("docs publish --skip-fetch Execute() error = %v", err)
+	}
+	if fetchCalls != 0 {
+		t.Fatalf("fetch calls = %d, want 0", fetchCalls)
+	}
+}
+
+func TestDocsPublishSkipFetchRequiresRefresh(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "configs", "portfolio.yaml")
+	runner := NewRootCmd()
+	runner.SetArgs([]string{"init", "--config", configPath})
+	if err := runner.Execute(); err != nil {
+		t.Fatalf("init Execute() error = %v", err)
+	}
+	runner = NewRootCmd()
+	runner.SetArgs([]string{"docs", "publish", "--config", configPath, "--skip-fetch"})
+	if err := runner.Execute(); err == nil || !strings.Contains(err.Error(), "--skip-fetch requires --refresh") {
+		t.Fatalf("docs publish --skip-fetch error = %v", err)
 	}
 }
 
@@ -1149,5 +1217,118 @@ func TestMarketPoolCommandIsRegistered(t *testing.T) {
 	outputFlag := marketPoolCmd.Flags().Lookup("output")
 	if outputFlag == nil {
 		t.Fatalf("expected output flag")
+	}
+}
+
+func TestMomentumPoolCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	momentumPoolCmd, _, err := cmd.Find([]string{"momentum-pool"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if momentumPoolCmd == nil {
+		t.Fatalf("expected momentum-pool command")
+	}
+	if flag := momentumPoolCmd.Flags().Lookup("days"); flag == nil || flag.DefValue != "300" {
+		t.Fatalf("expected days flag with default 300")
+	}
+}
+
+func TestMomentumStateCommandsAreRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	for _, args := range [][]string{{"momentum-state", "export"}, {"momentum-state", "import"}} {
+		found, _, err := cmd.Find(args)
+		if err != nil || found == nil {
+			t.Fatalf("Find(%v) = %v, %v", args, found, err)
+		}
+	}
+}
+
+func TestMomentumBacktestCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	backtestCmd, _, err := cmd.Find([]string{"momentum-backtest"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if backtestCmd == nil {
+		t.Fatalf("expected momentum-backtest command")
+	}
+	if flag := backtestCmd.Flags().Lookup("rebalance-every"); flag == nil || flag.DefValue != "0" {
+		t.Fatalf("expected rebalance-every flag to use config by default")
+	}
+	if flag := backtestCmd.Flags().Lookup("selection-count"); flag == nil || flag.DefValue != "0" {
+		t.Fatalf("expected selection-count flag to use config by default")
+	}
+	if flag := backtestCmd.Flags().Lookup("universe-seed"); flag == nil || flag.DefValue != "0" {
+		t.Fatalf("expected universe-seed flag with default 0")
+	}
+}
+
+func TestMomentumBacktestSensitivityCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	sensitivityCmd, _, err := cmd.Find([]string{"momentum-backtest-sensitivity"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if sensitivityCmd == nil {
+		t.Fatalf("expected momentum-backtest-sensitivity command")
+	}
+	if flag := sensitivityCmd.Flags().Lookup("seeds"); flag == nil || flag.DefValue != "5" {
+		t.Fatalf("expected seeds flag with default 5")
+	}
+	if flag := sensitivityCmd.Flags().Lookup("days"); flag == nil || flag.DefValue != "1200" {
+		t.Fatalf("expected days flag with default 1200")
+	}
+}
+
+func TestMomentumBacktestParameterGridCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	gridCmd, _, err := cmd.Find([]string{"momentum-backtest-grid"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if gridCmd == nil {
+		t.Fatalf("expected momentum-backtest-grid command")
+	}
+	if flag := gridCmd.Flags().Lookup("seeds"); flag == nil || flag.DefValue != "5" {
+		t.Fatalf("expected seeds flag with default 5")
+	}
+	if flag := gridCmd.Flags().Lookup("selection-counts"); flag == nil {
+		t.Fatalf("expected selection-counts flag")
+	}
+	if flag := gridCmd.Flags().Lookup("rebalance-values"); flag == nil {
+		t.Fatalf("expected rebalance-values flag")
+	}
+}
+
+func TestMomentumBacktestStageCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	stageCmd, _, err := cmd.Find([]string{"momentum-backtest-stages"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if stageCmd == nil {
+		t.Fatalf("expected momentum-backtest-stages command")
+	}
+	if flag := stageCmd.Flags().Lookup("seeds"); flag == nil || flag.DefValue != "5" {
+		t.Fatalf("expected seeds flag with default 5")
+	}
+}
+
+func TestMomentumBacktestEntryGridCommandIsRegistered(t *testing.T) {
+	t.Parallel()
+	cmd := NewRootCmd()
+	found, _, err := cmd.Find([]string{"momentum-backtest-entry-grid"})
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if found == nil {
+		t.Fatal("expected momentum-backtest-entry-grid command")
 	}
 }
