@@ -1,5 +1,5 @@
 {
-  "last_run_date": "2026-08-31",
+  "last_run_date": "2026-09-01",
   "latest": {
     "backtest": {
       "label": "策略回测",
@@ -37,35 +37,35 @@
   "archive": {
     "backtest": {
       "label": "归档策略回测",
-      "path": "archive/2026/08/31/backtest.md"
+      "path": "archive/2026/09/01/backtest.md"
     },
     "daily": {
       "label": "归档每日报告",
-      "path": "archive/2026/08/31/daily.md"
+      "path": "archive/2026/09/01/daily.md"
     },
     "dca-plan": {
       "label": "归档定投计划",
-      "path": "archive/2026/08/31/dca-plan.md"
+      "path": "archive/2026/09/01/dca-plan.md"
     },
     "market-pool": {
       "label": "归档候选池",
-      "path": "archive/2026/08/31/market-pool.md"
+      "path": "archive/2026/09/01/market-pool.md"
     },
     "momentum-parameter-grid": {
       "label": "归档动量参数稳健性",
-      "path": "archive/2026/08/31/momentum-parameter-grid.md"
+      "path": "archive/2026/09/01/momentum-parameter-grid.md"
     },
     "momentum-pool": {
       "label": "归档强势基金榜",
-      "path": "archive/2026/08/31/momentum-pool.md"
+      "path": "archive/2026/09/01/momentum-pool.md"
     },
     "momentum-sensitivity": {
       "label": "归档动量多样本回测",
-      "path": "archive/2026/08/31/momentum-sensitivity.md"
+      "path": "archive/2026/09/01/momentum-sensitivity.md"
     },
     "momentum-stages": {
       "label": "归档动量跨阶段稳健性",
-      "path": "archive/2026/08/31/momentum-stages.md"
+      "path": "archive/2026/09/01/momentum-stages.md"
     }
   }
 }
