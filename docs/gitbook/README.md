@@ -20,7 +20,7 @@
 
 ## 最新快照
 
-- 运行日期：`2026-09-24`
+- 运行日期：`2026-09-25`
 - 组合市值：`241345.81`
 - 当日加权涨跌：`-0.95%`
 - 本月计划定投：`5000`
@@ -48,15 +48,15 @@
 ## 历史归档
 
 - [浏览归档](archive/README.md)
-- [最新归档目录](archive/2026/09/24/README.md)
-- [最新归档日报](archive/2026/09/24/daily.md)
-- [最新归档稳定候选池](archive/2026/09/24/market-pool.md)
-- [最新归档当前强势基金榜](archive/2026/09/24/momentum-pool.md)
-- [最新归档动量多样本回测](archive/2026/09/24/momentum-sensitivity.md)
-- [最新归档动量参数稳健性](archive/2026/09/24/momentum-parameter-grid.md)
-- [最新归档动量跨阶段稳健性](archive/2026/09/24/momentum-stages.md)
-- [最新归档定投计划](archive/2026/09/24/dca-plan.md)
-- [最新归档策略回测](archive/2026/09/24/backtest.md)
+- [最新归档目录](archive/2026/09/25/README.md)
+- [最新归档日报](archive/2026/09/25/daily.md)
+- [最新归档稳定候选池](archive/2026/09/25/market-pool.md)
+- [最新归档当前强势基金榜](archive/2026/09/25/momentum-pool.md)
+- [最新归档动量多样本回测](archive/2026/09/25/momentum-sensitivity.md)
+- [最新归档动量参数稳健性](archive/2026/09/25/momentum-parameter-grid.md)
+- [最新归档动量跨阶段稳健性](archive/2026/09/25/momentum-stages.md)
+- [最新归档定投计划](archive/2026/09/25/dca-plan.md)
+- [最新归档策略回测](archive/2026/09/25/backtest.md)
 
 ## 方法说明
 
