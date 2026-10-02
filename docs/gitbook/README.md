@@ -14,13 +14,13 @@
 
 | 日报 | 定投 | 候选池 |
 | --- | --- | --- |
-| 持有 4 / 暂停 4 / 调整 2 | 计划 5000 元 / 2 只基金 | 3 只候选 / 保留 3 只 |
+| 持有 4 / 暂停 3 / 调整 3 | 计划 5000 元 / 2 只基金 | 3 只候选 / 保留 3 只 |
 | [每日报告](latest/daily.md) | [月度定投计划](latest/dca-plan.md) | [稳定候选池](latest/market-pool.md) |
-| 2 条建议，覆盖 10 个信号 | 优先定投：博时标普500ETF联接A 2523 元 | A股红利：国泰上证国企红利ETF联接A；美股标普500：摩根标普500指数(QDII)人民币A；美股纳指100：南方纳斯达克100指数发起(QDII)A |
+| 3 条建议，覆盖 10 个信号 | 优先定投：博时标普500ETF联接A 2523 元 | A股红利：国泰上证国企红利ETF联接A；美股标普500：摩根标普500指数(QDII)人民币A；美股纳指100：南方纳斯达克100指数发起(QDII)A |
 
 ## 最新快照
 
-- 运行日期：`2026-10-01`
+- 运行日期：`2026-10-02`
 - 组合市值：`237885.88`
 - 当日加权涨跌：`0.26%`
 - 本月计划定投：`5000`
@@ -47,15 +47,15 @@
 ## 历史归档
 
 - [浏览归档](archive/README.md)
-- [最新归档目录](archive/2026/10/01/README.md)
-- [最新归档日报](archive/2026/10/01/daily.md)
-- [最新归档稳定候选池](archive/2026/10/01/market-pool.md)
-- [最新归档当前强势基金榜](archive/2026/10/01/momentum-pool.md)
-- [最新归档动量多样本回测](archive/2026/10/01/momentum-sensitivity.md)
-- [最新归档动量参数稳健性](archive/2026/10/01/momentum-parameter-grid.md)
-- [最新归档动量跨阶段稳健性](archive/2026/10/01/momentum-stages.md)
-- [最新归档定投计划](archive/2026/10/01/dca-plan.md)
-- [最新归档策略回测](archive/2026/10/01/backtest.md)
+- [最新归档目录](archive/2026/10/02/README.md)
+- [最新归档日报](archive/2026/10/02/daily.md)
+- [最新归档稳定候选池](archive/2026/10/02/market-pool.md)
+- [最新归档当前强势基金榜](archive/2026/10/02/momentum-pool.md)
+- [最新归档动量多样本回测](archive/2026/10/02/momentum-sensitivity.md)
+- [最新归档动量参数稳健性](archive/2026/10/02/momentum-parameter-grid.md)
+- [最新归档动量跨阶段稳健性](archive/2026/10/02/momentum-stages.md)
+- [最新归档定投计划](archive/2026/10/02/dca-plan.md)
+- [最新归档策略回测](archive/2026/10/02/backtest.md)
 
 ## 方法说明
 
