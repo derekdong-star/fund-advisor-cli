@@ -1,4 +1,4 @@
-# 2026-10-19 快照
+# 2026-10-22 快照
 
 - [返回 2026 年 10 月](../README.md)
 
@@ -9,6 +9,5 @@
 - [定投计划](dca-plan.md)
 - [稳定候选池](market-pool.md)
 - [动量参数稳健性](momentum-parameter-grid.md)
-- [当前强势基金榜](momentum-pool.md)
 - [动量多样本回测](momentum-sensitivity.md)
 - [动量跨阶段稳健性](momentum-stages.md)
